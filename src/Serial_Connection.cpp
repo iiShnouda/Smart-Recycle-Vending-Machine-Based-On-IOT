@@ -1,0 +1,314 @@
+#include "Serial_Connection.h"
+#include <QDebug>
+
+// =========================================================================
+// Serial_Connection
+//
+// Lives on its own QThread. All public slots are invoked via queued
+// connections from the GUI thread, so they execute on the worker thread.
+// =========================================================================
+
+Serial_Connection::Serial_Connection(QObject *parent)
+    : QObject{parent}
+{}
+
+Serial_Connection::~Serial_Connection()
+{
+    closePort();
+}
+
+// ─── Public slots ──────────────────────────────────────────────────────────
+
+void Serial_Connection::start(const QString &portName, int baud)
+{
+    m_isStarted = true;
+    m_portName  = portName;
+    m_baud      = (baud > 0) ? baud : 115200;
+
+    // Lazily create the three timers (only on first start). All three live on
+    // this object → they run on the worker thread's event loop, not the GUI's.
+    if (!m_ackTimer) {
+        m_ackTimer = new QTimer(this);
+        m_ackTimer->setSingleShot(true);
+        connect(m_ackTimer, &QTimer::timeout,
+                this,       &Serial_Connection::onAckTimeout);
+    }
+    if (!m_watchdogTimer) {
+        m_watchdogTimer = new QTimer(this);
+        m_watchdogTimer->setInterval(kWatchdogPeriod);
+        connect(m_watchdogTimer, &QTimer::timeout,
+                this,            &Serial_Connection::onWatchdogTick);
+    }
+    if (!m_reconnectTimer) {
+        m_reconnectTimer = new QTimer(this);
+        m_reconnectTimer->setInterval(kReconnectPeriod);
+        connect(m_reconnectTimer, &QTimer::timeout,
+                this,             &Serial_Connection::onReconnectTick);
+    }
+
+    openPort();
+}
+
+void Serial_Connection::stop()
+{
+    m_isStarted = false;
+    if (m_ackTimer)       m_ackTimer->stop();
+    if (m_watchdogTimer)  m_watchdogTimer->stop();
+    if (m_reconnectTimer) m_reconnectTimer->stop();
+    m_outQueue.clear();
+    m_pending = {};
+    closePort();
+}
+
+void Serial_Connection::sendCommand(const QString &command, int timeoutMs)
+{
+    if (command.isEmpty()) return;
+    if (timeoutMs < 50)  timeoutMs = 50;       // clamp to a sane minimum
+    m_outQueue.enqueue({command, timeoutMs});
+
+    // If nothing is in flight, kick off the next one immediately.
+    if (m_pending.command.isEmpty()) {
+        sendNextFromQueue();
+    }
+}
+
+// ─── Connection management ─────────────────────────────────────────────────
+
+void Serial_Connection::openPort()
+{
+    if (m_serial && m_serial->isOpen()) return;
+
+    // Lazily construct the QSerialPort. Wired only once per object lifetime.
+    if (!m_serial) {
+        m_serial = new QSerialPort(this);
+        connect(m_serial, &QSerialPort::readyRead,
+                this,     &Serial_Connection::onReadyRead);
+        connect(m_serial, &QSerialPort::errorOccurred,
+                this,     &Serial_Connection::onSerialError);
+    }
+
+    // Resolve which port to open: explicit name, or auto-detect by VID:PID.
+    QString port = m_portName;
+    if (port.isEmpty() || port == "AUTO") {
+        port = findPortByVidPid();
+    }
+
+    if (port.isEmpty()) {
+        qWarning() << "[Serial] No matching device, retrying...";
+        m_reconnectTimer->start();
+        return;
+    }
+
+    // Configure 115200 8N1 — the universal default.
+    m_serial->setPortName(port);
+    m_serial->setBaudRate(m_baud);
+    m_serial->setDataBits(QSerialPort::Data8);
+    m_serial->setParity(QSerialPort::NoParity);
+    m_serial->setStopBits(QSerialPort::OneStop);
+    m_serial->setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!m_serial->open(QIODevice::ReadWrite)) {
+        qWarning() << "[Serial] Open failed:" << m_serial->errorString();
+        emit errorOccurred(m_serial->errorString());
+        m_reconnectTimer->start();
+        return;
+    }
+
+    qInfo() << "[Serial] Connected on" << port << "@" << m_baud;
+    m_serial->clear();          // discard anything sitting in OS buffers
+    m_rxBuffer.clear();
+    m_pingsMissed = 0;
+    m_reconnectTimer->stop();
+    m_watchdogTimer->start();
+    emit connected();
+
+    // If commands queued up while disconnected, drain them now.
+    if (m_pending.command.isEmpty() && !m_outQueue.isEmpty()) {
+        sendNextFromQueue();
+    }
+}
+
+void Serial_Connection::closePort()
+{
+    // Note: m_serial is a pointer — `m_serial && ...` checks "not null AND ..."
+    if (m_serial && m_serial->isOpen()) {
+        m_serial->close();
+    }
+    if (m_watchdogTimer) m_watchdogTimer->stop();
+    if (m_ackTimer)      m_ackTimer->stop();
+}
+
+void Serial_Connection::teardownAfterFailure()
+{
+    // Hard reset of the port object. Used when the link is dead beyond repair
+    // (cable yanked, watchdog timeout, ResourceError). After this, the
+    // reconnect timer keeps trying every kReconnectPeriod ms until it works.
+    closePort();
+    if (m_serial) {
+        m_serial->deleteLater();
+        m_serial = nullptr;
+    }
+    m_pending = {};                          // drop the in-flight command
+    emit disconnected();
+    if (m_isStarted) m_reconnectTimer->start();
+}
+
+QString Serial_Connection::findPortByVidPid() const
+{
+    // Walk all available ports and pick the one whose USB descriptor matches
+    // an STM32 USB-CDC device. Lets the user move the cable around without
+    // hard-coding "COM5" or "/dev/ttyACM0".
+    for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts()) {
+        if (info.hasVendorIdentifier() && info.hasProductIdentifier()
+            && info.vendorIdentifier()  == STM32_VID
+            && info.productIdentifier() == STM32_PID) {
+            return info.portName();
+        }
+    }
+    return {};
+}
+
+// ─── Send queue ────────────────────────────────────────────────────────────
+
+void Serial_Connection::sendNextFromQueue()
+{
+    if (m_outQueue.isEmpty()) return;
+    if (!m_serial || !m_serial->isOpen()) {
+        qWarning() << "[Serial] Cannot send, port not open. Will retry after reconnect.";
+        return;
+    }
+    const OutCommand next = m_outQueue.dequeue();
+    m_pending.command   = next.text;
+    m_pending.attempts  = 1;
+    m_pending.timeoutMs = next.timeoutMs;
+
+    writeRaw(m_pending.command.toUtf8() + '\n');
+
+    // Arm the per-command ACK timer with this command's timeout.
+    m_ackTimer->start(m_pending.timeoutMs);
+}
+
+void Serial_Connection::writeRaw(const QByteArray &bytes)
+{
+    qDebug() << "[Serial] TX:" << bytes.trimmed();
+    const qint64 n = m_serial->write(bytes);
+    if (n != bytes.size()) {
+        qWarning() << "[Serial] Short write:" << n << "of" << bytes.size()
+                   << m_serial->errorString();
+    }
+    m_serial->flush();         // push to OS now (don't wait for event loop)
+}
+
+// ─── Receive ───────────────────────────────────────────────────────────────
+
+void Serial_Connection::onReadyRead()
+{
+    // Append everything new to the rolling buffer.
+    m_rxBuffer.append(m_serial->readAll());
+
+    // Pull out as many complete lines as are buffered.
+    while (m_rxBuffer.contains('\n')) {
+        const int idx = m_rxBuffer.indexOf('\n');
+        const QByteArray line = m_rxBuffer.left(idx).trimmed();
+        m_rxBuffer.remove(0, idx + 1);
+        if (line.isEmpty()) continue;
+
+        const QString reply = QString::fromUtf8(line);
+        qDebug() << "[Serial] RX:" << reply;
+
+        // Any traffic from the STM32 means the link is healthy → reset
+        // the missed-ping counter so the watchdog won't trigger.
+        m_pingsMissed = 0;
+
+        // Try to resolve the in-flight command if this looks like an ACK.
+        if (!m_pending.command.isEmpty()) {
+            const bool ok  = reply.startsWith("Done", Qt::CaseInsensitive)
+                          || reply.startsWith("OK",   Qt::CaseInsensitive)
+                          || reply.startsWith("PONG", Qt::CaseInsensitive);
+            const bool err = reply.startsWith("Error", Qt::CaseInsensitive);
+
+            if (ok || err) {
+                m_ackTimer->stop();
+                if (ok) emit commandSucceeded(m_pending.command, reply);
+                else    emit commandFailed   (m_pending.command, reply);
+                m_pending = {};
+                sendNextFromQueue();
+            }
+            // Anything else is treated as an unsolicited message (sensor
+            // event, log line, etc.) and only emitted via replyReceived().
+        }
+
+        emit replyReceived(reply);
+    }
+}
+
+// ─── Timeouts & watchdog ───────────────────────────────────────────────────
+
+void Serial_Connection::onAckTimeout()
+{
+    if (m_pending.command.isEmpty()) return;
+
+    // Try again, up to kMaxRetries total attempts.
+    if (m_pending.attempts < kMaxRetries) {
+        m_pending.attempts++;
+        qWarning() << "[Serial] No ack — retry" << m_pending.attempts
+                   << "of" << kMaxRetries << ":" << m_pending.command;
+        if (m_serial && m_serial->isOpen()) {
+            writeRaw(m_pending.command.toUtf8() + '\n');
+            m_ackTimer->start(m_pending.timeoutMs);
+        } else {
+            // Port died mid-retry → bail out, watchdog/reconnect handles recovery
+            emit commandFailed(m_pending.command, "port closed");
+            m_pending = {};
+        }
+    } else {
+        qWarning() << "[Serial] Command failed after" << kMaxRetries
+                   << "tries:" << m_pending.command;
+        emit commandFailed(m_pending.command, "timeout");
+        m_pending = {};
+        sendNextFromQueue();
+    }
+}
+
+void Serial_Connection::onWatchdogTick()
+{
+    if (!m_serial || !m_serial->isOpen()) return;
+
+    // If we've sent kMaxMissedPings PINGs without any reply, the link is dead.
+    if (m_pingsMissed >= kMaxMissedPings) {
+        qWarning() << "[Serial] Watchdog: link dead, reconnecting...";
+        emit errorOccurred("watchdog timeout");
+        teardownAfterFailure();
+        return;
+    }
+
+    m_pingsMissed++;
+    // Queue PING with the default (fast) timeout. Any reply from the STM32
+    // resets m_pingsMissed in onReadyRead(), so even unsolicited traffic
+    // proves the link is alive.
+    m_outQueue.enqueue({QStringLiteral("PING"), kDefaultAckMs});
+    if (m_pending.command.isEmpty()) sendNextFromQueue();
+}
+
+void Serial_Connection::onReconnectTick()
+{
+    if (!m_isStarted) {
+        m_reconnectTimer->stop();
+        return;
+    }
+    qInfo() << "[Serial] Trying to reconnect...";
+    openPort();
+}
+
+void Serial_Connection::onSerialError(QSerialPort::SerialPortError err)
+{
+    if (err == QSerialPort::NoError) return;
+    qWarning() << "[Serial] Error:" << err
+               << (m_serial ? m_serial->errorString() : QString());
+    if (m_serial) emit errorOccurred(m_serial->errorString());
+
+    // ResourceError = the device disappeared (cable yank). Fully tear down.
+    if (err == QSerialPort::ResourceError) {
+        teardownAfterFailure();
+    }
+}

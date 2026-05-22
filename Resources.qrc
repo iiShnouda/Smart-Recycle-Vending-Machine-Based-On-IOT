@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RCC>
+    <qresource prefix="/">
+        <!-- QML Files -->
+        <file>qml/main.qml</file>
+        <file>qml/LanguageSelectionPage.qml</file>
+        <file>qml/Main.qml</file>
+        <file>qml/MainPage.qml</file>
+        <file>qml/translations.qml</file>
+        <!-- ... other QML files ... -->
+        
+        <!-- Assets -->
+        <file>assets/BackGround.jpg</file>
+        <file>assets/Recycle.png</file>
+        <!-- ... other assets ... -->
+    </qresource>
+</RCC>
+
