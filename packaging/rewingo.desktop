@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ReWinGo Kiosk
+GenericName=Recycling + Vending Kiosk
+Comment=Touch-screen UI for the ReWinGo recycling/vending machine
+Exec=/usr/local/bin/rewingo
+Icon=rewingo
+Terminal=false
+Categories=Utility;
+Keywords=kiosk;recycle;vending;
+StartupWMClass=rewingo

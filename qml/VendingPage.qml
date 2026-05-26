@@ -38,6 +38,63 @@ Rectangle {
     }
     function clearCart() { cart = [] }
 
+    // ───────── Dispense state ─────────
+    // We dispense items one at a time, deducting points only on success.
+    // A fault disables the product and shows a sorry dialog; the cart
+    // continues with the remaining items.
+    property int    dispensingIndex: -1            // -1 = idle, else cart[idx]
+    property string dispensingStatus: ""
+    readonly property bool dispensing: dispensingIndex >= 0
+
+    function startDispenseSequence() {
+        if (cart.length === 0 || dispensing) return
+        checkoutDialog.close()
+        dispensingIndex = 0
+        sendNextDispense()
+    }
+
+    function sendNextDispense() {
+        if (dispensingIndex >= cart.length) {
+            // All items processed — wrap up.
+            dispensingIndex = -1
+            dispensingStatus = ""
+            clearCart()
+            ProductsModel.reload()   // refresh in case any were disabled
+            return
+        }
+        const item = cart[dispensingIndex]
+        dispensingStatus = qsTr("Dispensing ") + item.name + "…"
+        // 10 s timeout: 1 rev ≈ 2 s + weighing settle (~0.4 s) + slack.
+        appManager.sendSerial("DISPENSE:" + item.slot, 10000)
+    }
+
+    Connections {
+        target: appManager
+        function onSerialCommandSucceeded(cmd, reply) {
+            if (!vendingPage.dispensing) return
+            if (!cmd.startsWith("DISPENSE:")) return
+            const item = cart[dispensingIndex]
+            // Real refund happens on the Pi (audit + DB) — for the UI we
+            // only need to mirror the deduction here.
+            vendingPage.userPoints -= item.price
+            dispensingIndex++
+            sendNextDispense()
+        }
+        function onSerialCommandFailed(cmd, reason) {
+            if (!vendingPage.dispensing) return
+            if (!cmd.startsWith("DISPENSE:")) return
+            const item = cart[dispensingIndex]
+            // No deduction → effectively refunded. Disable the slot so no
+            // one buys a broken auger before the admin services it.
+            ProductsModel.setActive(item.slot, false)
+            sorryDialog.failedItem = item
+            sorryDialog.failedReason = reason
+            sorryDialog.open()
+            dispensingIndex++
+            sendNextDispense()
+        }
+    }
+
     Component.onCompleted: { Idle.touch(); ProductsModel.reload() }
     StackView.onActivated: Idle.touch()
 
@@ -378,15 +435,11 @@ Rectangle {
                 enabled: vendingPage.userPoints >= cartTotal() && cart.length > 0
                 TapHandler {
                     enabled: parent.enabled
-                    onTapped: {
-                        for (const item of cart) {
-                            appManager.sendSerial(
-                                "STEP:" + item.slot + ":1600:0", 10000)
-                        }
-                        vendingPage.userPoints -= cartTotal()
-                        clearCart()
-                        checkoutDialog.close()
-                    }
+                    // Hands off to the per-item state machine. We no longer
+                    // pre-deduct cartTotal — points come off only as each
+                    // DISPENSE replies "Done". Faults disable that slot and
+                    // skip the deduction (= effective refund).
+                    onTapped: startDispenseSequence()
                 }
                 Text {
                     anchors.centerIn: parent
@@ -395,6 +448,126 @@ Rectangle {
                           : qsTr("Not enough points")
                     color: "#FFFFFF"
                     font.pixelSize: 26; font.weight: Font.ExtraBold
+                }
+            }
+        }
+    }
+
+    // ═══════════ DISPENSING OVERLAY ═══════════
+    // Blocks input + shows progress while items are dropping. Auto-closes
+    // when the sequence finishes (dispensingIndex resets to -1).
+    Rectangle {
+        anchors.fill: parent
+        color: "#CC000000"
+        visible: vendingPage.dispensing
+        z: 100
+        // Eat touches so the user can't double-tap.
+        TapHandler { enabled: vendingPage.dispensing; onTapped: Idle.touch() }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 30
+
+            BusyIndicator {
+                running: vendingPage.dispensing
+                width: 160; height: 160
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: vendingPage.dispensingStatus
+                color: "#FFFFFF"
+                font.pixelSize: 36; font.weight: Font.ExtraBold
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("Please wait — do not touch the chute")
+                color: "#A5F3FC"
+                font.pixelSize: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+        }
+    }
+
+    // ═══════════ SORRY / REFUND DIALOG ═══════════
+    Dialog {
+        id: sorryDialog
+        property var    failedItem:   ({})
+        property string failedReason: ""
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        Overlay.modal: Rectangle { color: "#A0000000" }
+        closePolicy: Popup.NoAutoClose
+        width: 720; height: 540
+        standardButtons: Dialog.NoButton
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 24
+            spacing: 18
+
+            Text {
+                text: "😞"
+                font.pixelSize: 96
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("Sorry — that item didn't drop")
+                color: "#1F2A1B"
+                font.pixelSize: 28; font.weight: Font.ExtraBold
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                text: (sorryDialog.failedItem.name || qsTr("Item")) + " — " +
+                      qsTr("Slot ") + (sorryDialog.failedItem.slot || "?")
+                color: "#5A6B52"
+                font.pixelSize: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("Your %1 points have been refunded.")
+                          .arg(sorryDialog.failedItem.price || 0)
+                color: "#0891B2"
+                font.pixelSize: 22; font.weight: Font.Bold
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("We've disabled this slot so no one else hits the same issue. " +
+                           "An admin will service it.")
+                color: "#1F2A1B"
+                font.pixelSize: 16
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                wrapMode: Text.WordWrap
+            }
+            // Tiny fault-reason line — useful while bringing the hardware up,
+            // can be hidden later by setting visible: false.
+            Text {
+                text: qsTr("Reason: ") + sorryDialog.failedReason
+                color: "#9CA3AF"
+                font.pixelSize: 12
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                wrapMode: Text.WordWrap
+            }
+
+            Rectangle {
+                width: 280; height: 70; radius: 35
+                color: "#16A34A"
+                anchors.horizontalCenter: parent.horizontalCenter
+                TapHandler { onTapped: sorryDialog.close() }
+                Text {
+                    anchors.centerIn: parent
+                    text: qsTr("OK")
+                    color: "#FFFFFF"
+                    font.pixelSize: 24; font.weight: Font.ExtraBold
                 }
             }
         }

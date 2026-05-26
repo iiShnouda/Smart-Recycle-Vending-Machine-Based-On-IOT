@@ -25,7 +25,11 @@ class ProductsModel : public QAbstractListModel {
 public:
     enum Roles {
         RoleSlot = Qt::UserRole + 1,
-        RoleName, RolePrice, RoleImage, RoleActive, RoleCount, RoleWeight
+        RoleName, RolePrice, RoleImage, RoleActive, RoleCount, RoleWeight,
+        RoleEmptyShelfRaw,     // HX711 reading when shelf is empty
+        RoleUnitWeightRaw,     // HX711 raw counts per single item
+        RoleLastRaw,           // most recent raw reading from the scanner
+        RoleCalibrated         // true if both empty + unit are set
     };
 
     explicit ProductsModel(QObject *parent = nullptr);
@@ -50,15 +54,44 @@ public slots:
     /** Update live count + weight (called by load cell scanner). */
     Q_INVOKABLE bool updateInventory(int slot, int count, int weightG);
 
+    /** Enable / disable a single slot. Used by the vending dispense flow
+     *  to auto-disable a product after a fault.                          */
+    Q_INVOKABLE bool setActive(int slot, bool active);
+
+    /** Apply a raw HX711 reading from the InventoryScanner. Re-computes
+     *  the count using stored calibration constants; logs a restock_events
+     *  row if the count changed since last scan. Returns the new count.  */
+    int ingestRawReading(int slot, int raw, const QString &source);
+
+    /* ── Calibration (callable from QML) ──────────────────────────────── */
+
+    /** Capture the *current* raw reading as the empty-shelf tare for `slot`.
+     *  Admin workflow: empty the shelf → press button → call this with the
+     *  latest scanner value.                                              */
+    Q_INVOKABLE bool calibrateEmptyShelf(int slot, int currentRaw);
+
+    /** Given the current raw reading and how many items are sitting on the
+     *  shelf, derive `unit_weight_raw = (current - empty_shelf_raw) / N`.
+     *  Returns false if N is zero or the shelf is below the tare.        */
+    Q_INVOKABLE bool calibrateUnitWeight(int slot, int currentRaw, int knownCount);
+
+    /** Snapshot helpers for QML diagnostics screens. */
+    Q_INVOKABLE int emptyShelfRaw(int slot) const;
+    Q_INVOKABLE int unitWeightRaw(int slot) const;
+    Q_INVOKABLE int lastRaw     (int slot) const;
+
 private:
     struct Row {
-        int     slot      = 0;
+        int     slot           = 0;
         QString name;
-        int     price     = 0;
+        int     price          = 0;
         QString imagePath;
-        bool    active    = false;
-        int     count     = 0;
-        int     weightG   = 0;
+        bool    active         = false;
+        int     count          = 0;
+        int     weightG        = 0;
+        int     emptyShelfRaw  = 0;
+        int     unitWeightRaw  = 0;
+        int     lastRaw        = 0;     // not persisted — runtime only
     };
 
     QList<Row> m_rows;

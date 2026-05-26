@@ -13,6 +13,7 @@ class ReedMonitor;
 class Database;
 class YoloRunner;
 class MongoClient;
+class InventoryScanner;
 
 /**
  * ApplicationManager — single instance, exposed to QML two ways:
@@ -80,6 +81,20 @@ public slots:
 
     Q_INVOKABLE void setKioskName(const QString &name);
 
+    // ---- Dispense fault inspection (called by AdminFaultsPage) ----
+    /** Newest faults first; limit defaults to 100.                       */
+    Q_INVOKABLE QVariantList dispenseFaults(int limit = 100);
+    /** Per-slot fault summary (count + last-ts).                         */
+    Q_INVOKABLE QVariantList dispenseFaultsBySlot();
+    /** Wipe the fault log (admin-only action).                           */
+    Q_INVOKABLE int          clearDispenseFaults();
+
+    // ---- Inventory / restock history (called by AdminInventoryPage) ---
+    Q_INVOKABLE QVariantList restockEvents(int limit = 100);
+    Q_INVOKABLE QVariantList latestRestockBySlot();
+    /** Force the inventory scanner to take a fresh sample right now. */
+    Q_INVOKABLE void         rescanInventoryNow();
+
 signals:
     void kioskNameChanged();
     void languageChanged(const QString &newLanguage);
@@ -131,6 +146,9 @@ private:
 
     // MongoDB Atlas Data API client
     MongoClient       *m_mongo        = nullptr;
+
+    // Inventory scanner — polls HX711 bank, keeps ProductsModel in sync
+    InventoryScanner  *m_scanner      = nullptr;
 
     // Kiosk identity (persisted via QSettings on first run)
     QString            m_kioskId;

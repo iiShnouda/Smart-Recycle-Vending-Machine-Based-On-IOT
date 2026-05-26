@@ -104,11 +104,76 @@ Rectangle {
         }
     }
 
+    // ============ Update-available banner ============
+    // Auto-fires when admin enters this page if a newer version has
+    // been detected. The banner stays until the admin taps it (which
+    // navigates to AdminAboutPage and silences the "new" toast for
+    // this version — see UpdateChecker QSettings tracking).
+    Rectangle {
+        id: updateBanner
+        anchors.top: topBar.bottom
+        anchors.topMargin: 16
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 24
+        anchors.rightMargin: 24
+        height: visible ? 84 : 0
+        Behavior on height { NumberAnimation { duration: 160 } }
+        visible: UpdateInfo.updateAvailable
+        radius: 18
+        color: "#FEF3C7"
+        border.width: 2; border.color: "#FBBF24"
+
+        Row {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 14
+
+            Rectangle {
+                width: 56; height: 56; radius: 28
+                color: "#FBBF24"
+                anchors.verticalCenter: parent.verticalCenter
+                Text { anchors.centerIn: parent; text: "⤓"
+                       color: "#FFFFFF"
+                       font.pixelSize: 32; font.weight: Font.Black }
+            }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 56 - 200 - 28
+                spacing: 2
+                Text {
+                    text: qsTr("New version available: v") +
+                          UpdateInfo.latestVersion
+                    color: "#92400E"
+                    font.pixelSize: 20; font.weight: Font.ExtraBold
+                }
+                Text {
+                    text: qsTr("You're on v%1 — tap to view release notes.")
+                              .arg(UpdateInfo.currentVersion)
+                    color: "#92400E"
+                    font.pixelSize: 13
+                }
+            }
+            Rectangle {
+                width: 180; height: 56; radius: 28
+                color: "#92400E"
+                anchors.verticalCenter: parent.verticalCenter
+                TapHandler {
+                    onTapped: stackView.push(Qt.resolvedUrl("AdminAboutPage.qml"))
+                }
+                Text { anchors.centerIn: parent
+                       text: qsTr("Show details")
+                       color: "#FFFFFF"
+                       font.pixelSize: 16; font.weight: Font.ExtraBold }
+            }
+        }
+    }
+
     // ============ Welcome header ============
     Column {
         id: header
-        anchors.top: topBar.bottom
-        anchors.topMargin: 30
+        anchors.top: updateBanner.bottom
+        anchors.topMargin: updateBanner.visible ? 16 : 30
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 6
 
@@ -230,6 +295,21 @@ Rectangle {
             label: qsTr("Logs"); subtitle: qsTr("System events & maintenance")
             accentColor: "#5A6B52"
             onTapped: stackView.push(Qt.resolvedUrl("AdminLogsPage.qml"))
+        }
+        NavTile {
+            label: qsTr("Faults"); subtitle: qsTr("Failed dispenses by slot")
+            accentColor: "#DC2626"
+            onTapped: stackView.push(Qt.resolvedUrl("AdminFaultsPage.qml"))
+        }
+        NavTile {
+            label: qsTr("Inventory"); subtitle: qsTr("Live counts & restock log")
+            accentColor: "#16A34A"
+            onTapped: stackView.push(Qt.resolvedUrl("AdminInventoryPage.qml"))
+        }
+        NavTile {
+            label: qsTr("About"); subtitle: qsTr("Version, updates, license")
+            accentColor: "#0891B2"
+            onTapped: stackView.push(Qt.resolvedUrl("AdminAboutPage.qml"))
         }
     }
 }

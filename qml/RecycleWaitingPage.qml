@@ -275,8 +275,10 @@ Rectangle {
         property real fillPercent: 0.5
         signal inserted()
 
-        width: 480
-        height: 580
+        // Sized for 1080-wide kiosk: two tanks × 440 + 70 spacing = 950
+        // (was 480 each → tight at 1080)
+        width: 440
+        height: 540
 
         TapHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
@@ -297,9 +299,9 @@ Rectangle {
         // Outer ring (sage matte)
         Rectangle {
             id: outerRing
-            width: 480
-            height: 480
-            radius: 240
+            width: 440
+            height: 440
+            radius: 220
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#FFFFFF"
@@ -369,8 +371,8 @@ Rectangle {
                 // Bottle / can image in center
                 Image {
                     anchors.centerIn: parent
-                    width: 200
-                    height: 280
+                    width: 180
+                    height: 250
                     source: tank.iconSource
                     fillMode: Image.PreserveAspectFit
                     smooth: true

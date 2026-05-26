@@ -1,0 +1,29 @@
+#!/bin/bash
+# prerm — runs before dpkg removes the files.
+#
+# `$1` tells us which lifecycle we're in:
+#   remove | upgrade | deconfigure | failed-upgrade
+# We don't touch /var/lib/rewingo here — `apt purge` triggers postrm
+# which handles that, and a plain remove should preserve user data.
+
+set -e
+
+case "$1" in
+  remove|upgrade|deconfigure)
+    # Stop the backend if it's running (no systemd unit yet; just kill
+    # any python process running our server.py).
+    if pgrep -f /opt/rewingo/backend/server.py >/dev/null 2>&1; then
+      echo "rewingo: stopping running backend…"
+      pkill -f /opt/rewingo/backend/server.py || true
+      sleep 1
+    fi
+    ;;
+  failed-upgrade)
+    ;;
+  *)
+    echo "prerm called with unknown argument: $1" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

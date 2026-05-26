@@ -1,5 +1,5 @@
 #include "../include/applicationmanager.h"
-#include "src/Serial_Connection.h"
+#include "../include/Serial_Connection.h"
 #include "../include/reed_monitor.h"
 #include "../include/database.h"
 #include "../include/logger.h"
@@ -13,6 +13,10 @@
 #include "../include/mongo_client.h"
 #include "../include/idle_manager.h"
 #include "../include/product_image_catalog.h"
+#include "../include/inventory_scanner.h"
+#include "../include/product_catalog.h"
+#include "../include/off_client.h"
+#include "../include/update_checker.h"
 
 #include <QStandardPaths>
 #include <QDir>
@@ -61,6 +65,9 @@ void ApplicationManager::initialize()
     new AdminAuth(this);
     new FaceService(this);
     new ProductsModel(this);
+    new ProductCatalog(this);
+    new OpenFoodFactsClient(this);
+    new UpdateChecker(this);
     new DiagnosticsRunner(this);
     new Analytics(this);
     new LogsViewer(this);
@@ -154,6 +161,12 @@ void ApplicationManager::initialize()
         // Tell ProductsModel about the DB so it can populate from it.
         if (ProductsModel::s_instance)
             ProductsModel::s_instance->setDatabase(m_database);
+
+        // Shared product catalog (across kiosks via Mongo). The singleton
+        // is created automatically by the QML engine via QML_SINGLETON;
+        // we only need to feed it the DB handle.
+        if (ProductCatalog::s_instance)
+            ProductCatalog::s_instance->setDatabase(m_database);
     }
 
     // ── Reed switch monitor ────────────────────────────────────────────
@@ -162,6 +175,22 @@ void ApplicationManager::initialize()
             this,   &ApplicationManager::adminRequested);
     // Reed pin (BCM GPIO 22 by default — change to match your wiring).
     m_reed->start(22, true);
+
+    // ── Inventory scanner ──────────────────────────────────────────────
+    // Created AFTER products model + database are wired so the boot scan
+    // can land into a ready model. The scanner auto-runs an initial scan
+    // when Serial_Connection emits `connected`.
+    m_scanner = new InventoryScanner(this, this);
+    m_scanner->start();
+
+    // Door-closed → assume admin just restocked. Force a fresh scan tagged
+    // "admin" so restock_events gets a row per slot that changed.
+    connect(m_reed, &ReedMonitor::magnetStateChanged,
+            this,   [this](bool present) {
+        if (!present || !m_scanner) return;       // we only care about close
+        Logger::info("Inventory", "Admin door closed — rescan");
+        m_scanner->rescanNow("admin");
+    });
 
     // ── YOLO models + face service ─────────────────────────────────────
     {
@@ -194,6 +223,20 @@ void ApplicationManager::initialize()
     "al-sbP47gMCPkSSrT1QvBejTR_gqCH8cAWyVHL8ypPb-1m",
     "Cluster0",
     "rewingo");
+
+    // ── Update checker ─────────────────────────────────────────────────
+    // Owner/name as it appears in the GitHub URL — bake yours in here,
+    // OR override at runtime via QSettings("updater/repo", "owner/name").
+    if (UpdateChecker::s_instance) {
+        QSettings s;
+        const QString repo =
+            s.value("updater/repo",
+                    QStringLiteral("YOUR_USER/rewingo")).toString();
+        UpdateChecker::s_instance->configure(repo);
+        // Delay the first hit by 5 s so it doesn't share CPU with USB
+        // enumeration. After that, every 6 h.
+        UpdateChecker::s_instance->start(5000);
+    }
 
     qInfo() << "[INIT] ApplicationManager initialized successfully";
     qInfo() << "========================================";
@@ -261,6 +304,15 @@ void ApplicationManager::sendSerial(const QString &command, int timeoutMs)
     if (!m_serial) return;
     // Negative or zero → tell Serial_Connection to use its default (500 ms).
     if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
+
+    // Pause inventory polling whenever a DISPENSE is in flight so the
+    // scanner doesn't race the dispense task on the HX711 bus. The
+    // dispense itself does a weigh-before + weigh-after internally —
+    // we'll resume + rescan once the reply lands.
+    if (m_scanner && command.startsWith("DISPENSE:")) {
+        m_scanner->pauseFor("dispense");
+    }
+
     // Cross-thread: posts the call to the serial worker's event loop.
     QMetaObject::invokeMethod(m_serial, "sendCommand", Qt::QueuedConnection,
                               Q_ARG(QString, command),
@@ -312,6 +364,13 @@ void ApplicationManager::onSerialCommandSucceeded(const QString &command,
 {
     qInfo() << "[App] cmd OK :" << command << "<-" << reply;
     emit serialCommandSucceeded(command, reply);
+
+    // Dispense finished cleanly → let the scanner take a fresh sample so the
+    // model reflects the just-dropped item. Source tag stays "dispense".
+    if (m_scanner && command.startsWith("DISPENSE:")) {
+        m_scanner->resume();
+    }
+
     if (DiagnosticsRunner::s_instance)
         DiagnosticsRunner::s_instance->onCommandSucceeded(command, reply);
 }
@@ -321,8 +380,69 @@ void ApplicationManager::onSerialCommandFailed(const QString &command,
 {
     qWarning() << "[App] cmd FAIL:" << command << "(" << reason << ")";
     emit serialCommandFailed(command, reason);
+
+    // Persist DISPENSE failures so the admin can audit them after the fact.
+    // Reason format from the STM32:
+    //   "Error DISPENSE:<slot>:<code>:before=<g>:after=<g>:drop=<g>:index=<n>"
+    // The code is one of STALL / NO_DROP / STEP_LOSS / TIMEOUT / BUSY. If
+    // we got here from a serial-layer timeout the reason is just "timeout"
+    // and the parsing below leaves the weights at 0 — still useful.
+    if (m_database && command.startsWith("DISPENSE:")) {
+        const int slot = command.section(':', 1, 1).toInt();
+        QString reasonCode = "TIMEOUT";
+        int before = 0, after = 0, drop = 0, idx = 0;
+
+        const QStringList parts = reason.split(':');
+        if (parts.size() >= 3 && parts[0].startsWith("Error")) {
+            reasonCode = parts[2];
+            for (const QString &p : parts) {
+                if      (p.startsWith("before=")) before = p.mid(7).toInt();
+                else if (p.startsWith("after="))  after  = p.mid(6).toInt();
+                else if (p.startsWith("drop="))   drop   = p.mid(5).toInt();
+                else if (p.startsWith("index="))  idx    = p.mid(6).toInt();
+            }
+        }
+        m_database->recordDispenseFault(slot, reasonCode,
+                                        before, after, drop, idx);
+    }
+
+    // Dispense failed too — scanner needs to come back up either way.
+    if (m_scanner && command.startsWith("DISPENSE:")) {
+        m_scanner->resume();
+    }
+
     if (DiagnosticsRunner::s_instance)
         DiagnosticsRunner::s_instance->onCommandFailed(command, reason);
+}
+
+QVariantList ApplicationManager::dispenseFaults(int limit)
+{
+    return m_database ? m_database->listDispenseFaults(limit) : QVariantList{};
+}
+
+QVariantList ApplicationManager::dispenseFaultsBySlot()
+{
+    return m_database ? m_database->faultsBySlot() : QVariantList{};
+}
+
+int ApplicationManager::clearDispenseFaults()
+{
+    return m_database ? m_database->clearDispenseFaults() : 0;
+}
+
+QVariantList ApplicationManager::restockEvents(int limit)
+{
+    return m_database ? m_database->listRestockEvents(limit) : QVariantList{};
+}
+
+QVariantList ApplicationManager::latestRestockBySlot()
+{
+    return m_database ? m_database->latestRestockBySlot() : QVariantList{};
+}
+
+void ApplicationManager::rescanInventoryNow()
+{
+    if (m_scanner) m_scanner->rescanNow("manual");
 }
 
 void ApplicationManager::onSerialError(const QString &message)

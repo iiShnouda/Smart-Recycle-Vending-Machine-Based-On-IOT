@@ -7,8 +7,11 @@ import Recycle_Vending_Machine_LCD
 Window {
     id: window
     visible: true
-    width: 1200
+    // Production display: 15.6" LCD in portrait → 1080 × 1920
+    width: 1080
     height: 1920
+    minimumWidth: 1080
+    minimumHeight: 1920
     color: "#F2F4ED"
     title: "ReWinGo"
 

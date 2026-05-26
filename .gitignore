@@ -80,6 +80,11 @@ CMakeLists.txt.user*
 .rcc/
 .uic/
 /build*/
+/.qt/
+
+# Qt Creator workspace state (per-developer)
+.qtcreator/
+CMakeUserPresets.json
 
 # Local Claude / agent state
 .claude/
@@ -93,6 +98,12 @@ backend/.env
 backend/venv/
 backend/__pycache__/
 backend/**/__pycache__/
+
+# Advanced Installer build outputs (the .aip file IS tracked, but the
+# produced installers are big and rebuildable from the project file).
+packaging/AdvancedInstaller/output/
+*.msi
+*.exe-cache
 
 # Stray QML helper that's not part of the qt_add_qml_module set
 qml/translations.qml

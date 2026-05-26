@@ -57,13 +57,14 @@ Rectangle {
         anchors.top: headerBar.bottom
         anchors.topMargin: 30
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 18
+        spacing: 14
 
         component Kpi : Rectangle {
             property string label
             property string value
             property color  colour: "#0891B2"
-            width: 240; height: 150; radius: 24
+            // Sized for 1080-wide kiosk: 4 × 220 + 3 × 14 spacing = 922
+            width: 220; height: 150; radius: 24
             color: "#FFFFFF"
             border.width: 2; border.color: "#D8E0CF"
             Column {
