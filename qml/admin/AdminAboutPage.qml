@@ -123,12 +123,43 @@ Rectangle {
         anchors.topMargin: 18
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width * 0.94
-        height: UpdateInfo.updateAvailable ? 280 : 130
+        height: UpdateInfo.updateAvailable ? 360 : 130
         Behavior on height { NumberAnimation { duration: 160 } }
         radius: 22
         color: UpdateInfo.updateAvailable ? "#FEF3C7" : "#FFFFFF"
         border.width: 2
         border.color: UpdateInfo.updateAvailable ? "#FBBF24" : "#D8E0CF"
+
+        // Live install-flow state. The button label / progress bar listen
+        // to these instead of trying to track UpdateInfo.busy alone.
+        property string installStatus: ""        // "downloading" | "installing" | "" (idle)
+        property real   installProgress: 0.0     // 0..1 during download
+
+        Connections {
+            target: UpdateInfo
+            function onDownloadProgress(received, total) {
+                if (total > 0) {
+                    updateCard.installStatus  = "downloading"
+                    updateCard.installProgress = received / total
+                }
+            }
+            function onInstallStarted() {
+                updateCard.installStatus = "installing"
+                updateCard.installProgress = 1.0
+            }
+            function onInstallFinished(msg) {
+                if (msg.length > 0)
+                    installError.text = msg
+                else
+                    installError.text = qsTr("Restarting…")
+                updateCard.installStatus = ""
+            }
+            function onInstallFailed(reason) {
+                installError.text = qsTr("Install failed: ") + reason
+                updateCard.installStatus = ""
+                updateCard.installProgress = 0.0
+            }
+        }
 
         Column {
             anchors.fill: parent
@@ -186,6 +217,46 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            // ── Install Update button + progress (only when an update is available)
+            Rectangle {
+                visible: UpdateInfo.updateAvailable
+                width: parent.width; height: 70; radius: 35
+                color: updateCard.installStatus !== "" ? "#9CA3AF" : "#16A34A"
+
+                TapHandler {
+                    enabled: updateCard.installStatus === ""
+                    onTapped: UpdateInfo.downloadAndInstall()
+                }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 12
+                    BusyIndicator {
+                        visible: updateCard.installStatus !== ""
+                        running: updateCard.installStatus !== ""
+                        width: 28; height: 28
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: updateCard.installStatus === "downloading"
+                              ? qsTr("Downloading… %1%")
+                                    .arg(Math.round(updateCard.installProgress * 100))
+                            : updateCard.installStatus === "installing"
+                              ? qsTr("Installing — the app will restart…")
+                              : qsTr("⤓  Download & install v") + UpdateInfo.latestVersion
+                        color: "#FFFFFF"
+                        font.pixelSize: 18; font.weight: Font.ExtraBold
+                    }
+                }
+            }
+            Text {
+                id: installError
+                visible: UpdateInfo.updateAvailable && text.length > 0
+                text: ""
+                color: text.indexOf("failed") >= 0 ? "#DC2626" : "#16A34A"
+                font.pixelSize: 12
             }
 
             // ── Release notes (only when an update is available) ──────

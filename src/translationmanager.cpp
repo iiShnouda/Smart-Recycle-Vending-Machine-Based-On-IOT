@@ -60,10 +60,10 @@ bool TranslationManager::loadTranslation(const QString &languageCode)
 QString TranslationManager::getTranslationPath(const QString &languageCode) const
 {
     if (languageCode == "en") {
-        return ":/qt/qml/Recycle_Vending_Machine_LCD/resources/translations/Recycle_Vending_Machine_LCD_en_US.qm";
+        return ":/Recycle_Vending_Machine_LCD/resources/translations/Recycle_Vending_Machine_LCD_en_US.qm";
     }
     if (languageCode == "ar") {
-        return ":/qt/qml/Recycle_Vending_Machine_LCD/resources/translations/Recycle_Vending_Machine_LCD_ar_EG.qm";
+        return ":/Recycle_Vending_Machine_LCD/resources/translations/Recycle_Vending_Machine_LCD_ar_EG.qm";
     }
 
     return {};

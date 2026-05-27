@@ -51,7 +51,7 @@ Rectangle {
         target: FaceService
         function onEnrollSucceeded(uid) {
             stackView.replace(
-                "qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
+                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
                 { userId: uid })
         }
         function onEnrollFailed(reason) {

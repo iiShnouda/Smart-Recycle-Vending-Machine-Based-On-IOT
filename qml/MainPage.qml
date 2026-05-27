@@ -91,28 +91,60 @@ Rectangle {
             }
         }
 
-        // Right side: Exit button
-        Rectangle {
+        // Right side row: Admin button + Exit button.
+        // The Admin button is the manual entry path while the STM32 reed
+        // switch isn't wired up — once it is, this button can stay as a
+        // backup for operator-on-site service.
+        Row {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: 90
-            height: 90
-            radius: 45
-            color: "#FFFFFF"
-            border.width: 2
-            border.color: "#D8E0CF"
+            spacing: 14
 
-            TapHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-                onTapped: exitToHome()
+            // Admin button (red — distinct from the customer-facing controls).
+            Rectangle {
+                width: 90
+                height: 90
+                radius: 45
+                color: "#DC2626"
+
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+                    onTapped: {
+                        bumpIdle()
+                        appManager.devTriggerAdmin()
+                    }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: { langTick; return qsTr("ADMIN") }
+                    font.pixelSize: 18
+                    font.weight: Font.Black
+                    color: "#FFFFFF"
+                }
             }
 
-            Text {
-                anchors.centerIn: parent
-                text: "EXIT"
-                font.pixelSize: 22
-                font.weight: Font.Black
-                color: "#1F2A1B"
+            // Exit button.
+            Rectangle {
+                width: 90
+                height: 90
+                radius: 45
+                color: "#FFFFFF"
+                border.width: 2
+                border.color: "#D8E0CF"
+
+                TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+                    onTapped: exitToHome()
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: { langTick; return qsTr("EXIT") }
+                    font.pixelSize: 22
+                    font.weight: Font.Black
+                    color: "#1F2A1B"
+                }
             }
         }
     }
@@ -165,8 +197,8 @@ Rectangle {
             height: 540
             title: { langTick; return qsTr("Vending") }
             subtitle: { langTick; return qsTr("Buy products using your earned points") }
-            gifSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/Vending1.gif"
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/vending.png"
+            gifSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/Vending1.gif"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/vending.png"
 
             onTapped: {
                 bumpIdle()
@@ -180,8 +212,8 @@ Rectangle {
             height: 540
             title: { langTick; return qsTr("Recycle") }
             subtitle: { langTick; return qsTr("Plastic bottles and aluminum cans only") }
-            gifSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/Recycle1.gif"
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/Recycle.png"
+            gifSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/Recycle1.gif"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/Recycle.png"
 
             onTapped: openRecycleNotice()
         }

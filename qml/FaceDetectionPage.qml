@@ -84,7 +84,7 @@ Rectangle {
         property string userName
         onTriggered: {
             cam.active = false
-            stackView.push("qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
+            stackView.push("qrc:/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
                            { userName: userName, userId: userId })
         }
     }
@@ -96,7 +96,7 @@ Rectangle {
             //   ConsentPage  → FaceEnrollPage  → RegistrationCompletePage → MainPage
             cam.active = false
             stackView.replace(
-                "qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
+                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
         }
     }
 

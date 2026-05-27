@@ -1,0 +1,11 @@
+# /etc/sudoers.d/rewingo — placed by the .deb's postinst.
+#
+# Grants the `rewingo` Unix user the ability to run dpkg -i on its own
+# package files in /tmp ONLY. No general root, no apt, no shell. The
+# helper script /usr/local/bin/rewingo-update-helper invokes this exact
+# command after downloading the new .deb from GitHub Releases.
+#
+# Edit `rewingo` below to whichever local user actually runs the kiosk
+# (the postinst replaces it with $SUDO_USER if it can detect one).
+
+rewingo ALL=(root) NOPASSWD: /usr/bin/dpkg -i /tmp/rewingo_*.deb

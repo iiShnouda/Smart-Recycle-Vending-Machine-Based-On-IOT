@@ -121,7 +121,7 @@ Rectangle {
 
         TankCircle {
             label: { langTick; return qsTr("Plastic Bottles") }
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
             fillPercent: waitingPage.plasticTankVolume
 
             onInserted: {
@@ -133,7 +133,7 @@ Rectangle {
 
         TankCircle {
             label: { langTick; return qsTr("Aluminum Cans") }
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
             fillPercent: waitingPage.canTankVolume
 
             onInserted: {

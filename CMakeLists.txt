@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.1 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,6 +17,14 @@ option(USE_OPENCV "Enable OpenCV for YOLO" OFF)
 if (USE_OPENCV)
     find_package(OpenCV REQUIRED COMPONENTS dnn imgproc imgcodecs)
     add_compile_definitions(HAVE_OPENCV)
+endif()
+
+# libmosquitto — the kiosk's MQTT pipe. apt: libmosquitto-dev.
+find_path(MOSQUITTO_INCLUDE_DIR mosquitto.h)
+find_library(MOSQUITTO_LIBRARY NAMES mosquitto)
+if (NOT MOSQUITTO_INCLUDE_DIR OR NOT MOSQUITTO_LIBRARY)
+    message(FATAL_ERROR
+        "libmosquitto not found. Install with: sudo apt install libmosquitto-dev")
 endif()
 
 # Lowered from 6.11 to 6.4 so the project builds against whichever Qt 6
@@ -76,7 +84,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         include/face_service.h          src/face_service.cpp
         include/analytics.h             src/analytics.cpp
         include/logs_viewer.h           src/logs_viewer.cpp
-        include/mongo_client.h          src/mongo_client.cpp
+        include/mqtt_client.h           src/mqtt_client.cpp
         include/idle_manager.h          src/idle_manager.cpp
         include/product_image_catalog.h src/product_image_catalog.cpp
         include/inventory_scanner.h     src/inventory_scanner.cpp
@@ -99,6 +107,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
 target_include_directories(appRecycle_Vending_Machine_LCD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${MOSQUITTO_INCLUDE_DIR}
 )
 
 set_target_properties(appRecycle_Vending_Machine_LCD PROPERTIES
@@ -119,6 +128,7 @@ target_link_libraries(appRecycle_Vending_Machine_LCD PRIVATE
     Qt6::Network
     Qt6::Multimedia
     Qt6::VirtualKeyboard
+    ${MOSQUITTO_LIBRARY}
 )
 
 if (USE_OPENCV)
@@ -169,20 +179,26 @@ install(TARGETS appRecycle_Vending_Machine_LCD
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION opt/rewingo/bin)
 
-# Python backend — keep .env.example for the postinst template, drop
-# the live .env (real credentials must never ship in a package).
-install(DIRECTORY backend/
-    DESTINATION opt/rewingo/backend
-    REGEX   "/\\.env$"  EXCLUDE
-    PATTERN "venv"      EXCLUDE
-    PATTERN "__pycache__" EXCLUDE)
+# The Flask backend is gone — we publish directly over MQTT now. We still
+# ship the .env.example as a template at /opt/rewingo/share/ so postinst
+# can drop it into /etc/rewingo/.env on a fresh install.
+install(FILES backend/.env.example
+    DESTINATION opt/rewingo/share
+    RENAME      env.example)
 
 install(PROGRAMS packaging/rewingo.sh
     DESTINATION usr/local/bin
     RENAME      rewingo)
-install(PROGRAMS packaging/rewingo-backend.sh
+install(PROGRAMS packaging/rewingo-update-helper.sh
     DESTINATION usr/local/bin
-    RENAME      rewingo-backend)
+    RENAME      rewingo-update-helper)
+install(FILES   packaging/sudoers.d/rewingo
+    DESTINATION etc/sudoers.d
+    PERMISSIONS OWNER_READ GROUP_READ)   # sudoers wants 0440 / root:root
+
+# (No Flask systemd service any more — MQTT publishes from inside the
+#  Qt process directly. The old rewingo-backend.service file is kept on
+#  disk for reference but not installed.)
 install(FILES   packaging/rewingo.desktop
     DESTINATION usr/share/applications)
 install(FILES   resources/assets/vending.png
@@ -192,6 +208,15 @@ install(FILES   resources/assets/vending.png
 # ── CPack: build a .deb ─────────────────────────────────────────────────
 # Invoke with:    cmake --build build --target package
 # Produces:       build/rewingo_<version>_arm64.deb
+#
+# IMPORTANT: install() rules above use relative DESTINATIONs (e.g.
+#   "opt/rewingo/bin"). Without the override below, CMake prepends
+#   CMAKE_INSTALL_PREFIX (usually "/usr"), so files would land at
+#   /usr/opt/rewingo/bin instead of /opt/rewingo/bin. Setting the CPack
+#   prefix to "/" makes relative destinations resolve from the filesystem
+#   root — the standard Debian convention.
+set(CPACK_PACKAGING_INSTALL_PREFIX        "/")
+
 set(CPACK_GENERATOR                       "DEB")
 set(CPACK_PACKAGE_NAME                    "rewingo")
 set(CPACK_PACKAGE_VERSION                 "${PROJECT_VERSION}")
@@ -229,9 +254,8 @@ set(REWINGO_DEB_DEPS
     qml6-module-qt-labs-settings
     qml6-module-qtquick-virtualkeyboard
     libopencv-dev
-    python3
-    python3-venv
-    python3-pip
+    libmosquitto1
+    ca-certificates
 )
 string(JOIN ", " CPACK_DEBIAN_PACKAGE_DEPENDS ${REWINGO_DEB_DEPS})
 

@@ -5,7 +5,7 @@
 > over USB-CDC for all motor, sensor, and load-cell hardware.
 
 [![Build status](https://img.shields.io/github/actions/workflow/status/YOUR_USER/rewingo/build.yml?branch=main)](https://github.com/YOUR_USER/rewingo/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: PolyForm NC](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange.svg)](LICENSE)
 [![Qt 6.4+](https://img.shields.io/badge/Qt-6.4%2B-41cd52)](https://www.qt.io/)
 [![Platform: Pi 4 / Pi 5](https://img.shields.io/badge/platform-Raspberry%20Pi-c51a4a)](https://www.raspberrypi.com/)
 
@@ -143,4 +143,17 @@ code-style + PR-process basics.
 
 ## License
 
-[MIT](LICENSE) — do what you want, just keep the copyright notice.
+**[PolyForm Noncommercial 1.0.0](LICENSE)** — source-available, non-commercial.
+
+You're welcome to:
+- ✅ Read, fork, modify, and run the code for **personal**, **educational**, or **research** purposes
+- ✅ Use it in school / university / hackathon projects
+- ✅ Share modified copies as long as you keep the copyright notice and this license
+
+You **may not**:
+- ❌ Sell this software, build a paid product around it, or use it in any commercial offering
+- ❌ Remove the copyright notice or pass the work off as your own
+- ❌ Sub-license it to others
+
+For commercial licensing terms, contact the copyright holder via the
+GitHub repo issues page.

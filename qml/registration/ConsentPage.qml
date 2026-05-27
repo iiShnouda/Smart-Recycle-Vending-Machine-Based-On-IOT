@@ -119,7 +119,7 @@ Rectangle {
             border.width: 2; border.color: "#5A6B52"
             TapHandler {
                 onTapped: stackView.replace(
-                    "qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/QRCodePage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/QRCodePage.qml")
             }
             Text { anchors.centerIn: parent
                    text: { langTick; return qsTr("Use QR instead") }
@@ -132,7 +132,7 @@ Rectangle {
             color: "#1A1D1A"
             TapHandler {
                 onTapped: stackView.replace(
-                    "qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml")
             }
             Row {
                 anchors.centerIn: parent; spacing: 10

@@ -39,8 +39,9 @@ public:
     void setKioskId(const QString &id) { m_kioskId = id; }
     QString kioskId() const { return m_kioskId; }
 
-    /** Wire the MongoDB client so writes also push to the cloud. */
-    void setMongoClient(class MongoClient *m) { m_mongo = m; }
+    /** Wire the MQTT client so every write is also published to the
+     *  broker (one MQTT topic per logical "collection").              */
+    void setMqttClient(class MqttClient *m) { m_mqtt = m; }
 
     /** Configure REST endpoint for sync. Empty URL disables sync. */
     void setRemoteSync(const QString &endpointUrl, const QString &apiKey = {});
@@ -136,7 +137,7 @@ private:
     QString      m_apiKey;
     QTimer       m_syncTimer;
     QString      m_kioskId;
-    class MongoClient *m_mongo = nullptr;
+    class MqttClient *m_mqtt = nullptr;
 };
 
 #endif // DATABASE_H

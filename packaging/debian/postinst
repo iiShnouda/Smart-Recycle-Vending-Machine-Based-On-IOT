@@ -17,12 +17,13 @@ echo "rewingo: post-install setup…"
 mkdir -p "$DATA_DIR"
 chmod 0775 "$DATA_DIR"
 
-# 2. Config dir + .env template. NEVER overwrite a live .env.
+# 2. Config dir + .env template. NEVER overwrite a live .env. Chown to
+#    the rewingo user so the systemd service (running as that user) can
+#    actually read the credentials.
 mkdir -p "$ETC_DIR"
 if [ ! -f "$ETC_DIR/.env" ]; then
   if [ -f "$PREFIX/backend/.env.example" ]; then
     cp "$PREFIX/backend/.env.example" "$ETC_DIR/.env"
-    chmod 0640 "$ETC_DIR/.env"
     echo "rewingo: copied .env.example to $ETC_DIR/.env (edit before running)"
   else
     cat > "$ETC_DIR/.env" <<'EOF'
@@ -31,24 +32,53 @@ if [ ! -f "$ETC_DIR/.env" ]; then
 # MONGO_DB=rewingo
 # BACKEND_API_KEY=replace-me
 EOF
-    chmod 0640 "$ETC_DIR/.env"
+  fi
+fi
+# Always fix perms + ownership so the systemd service (User=rewingo) can read.
+if id -u rewingo >/dev/null 2>&1; then
+  chown rewingo:rewingo "$ETC_DIR/.env" "$ETC_DIR"
+fi
+chmod 0640 "$ETC_DIR/.env"
+chmod 0750 "$ETC_DIR"
+
+# 3. (no Python venv any more — the kiosk publishes over MQTT directly,
+#    no Flask backend to set up.)
+
+# 4. Update-helper log file — pre-create so the helper script (which runs
+#    as the kiosk user before sudo takes over) can append without root.
+touch /var/log/rewingo-update.log
+chmod 0666 /var/log/rewingo-update.log
+
+# 5. Sudoers entry for the in-app self-updater. We ship a template that
+#    grants the `rewingo` user passwordless `dpkg -i` on its own package.
+#    If the current install user is NOT named "rewingo", rewrite the file
+#    in-place so the rule matches reality. visudo -c validates before we
+#    keep the file — a bad sudoers entry would lock out sudo entirely.
+SUDOERS=/etc/sudoers.d/rewingo
+if [ -f "$SUDOERS" ]; then
+  KIOSK_USER="${SUDO_USER:-rewingo}"
+  if [ "$KIOSK_USER" != "rewingo" ]; then
+    sed -i "s/^rewingo /$KIOSK_USER /" "$SUDOERS"
+  fi
+  chmod 0440 "$SUDOERS"
+  if ! visudo -c -f "$SUDOERS" >/dev/null 2>&1; then
+    echo "rewingo: WARNING — sudoers file failed validation, removing"
+    rm -f "$SUDOERS"
   fi
 fi
 
-# 3. Python virtualenv for the Flask backend. First install creates it;
-#    upgrades reuse the existing venv unless you blow it away first.
-if [ ! -d "$VENV" ]; then
-  echo "rewingo: creating Python virtualenv at $VENV …"
-  python3 -m venv "$VENV"
+# 6. Clean up the old Flask backend systemd unit, if it's left over
+#    from a previous version. We don't ship a service file any more.
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl is-enabled --quiet rewingo-backend.service 2>/dev/null; then
+    systemctl disable rewingo-backend.service >/dev/null 2>&1 || true
+  fi
+  systemctl stop rewingo-backend.service 2>/dev/null || true
+  rm -f /etc/systemd/system/rewingo-backend.service
+  systemctl daemon-reload
 fi
 
-if [ -f "$PREFIX/backend/requirements.txt" ]; then
-  echo "rewingo: installing backend Python deps …"
-  "$VENV/bin/pip" install --quiet --upgrade pip
-  "$VENV/bin/pip" install --quiet -r "$PREFIX/backend/requirements.txt"
-fi
-
-# 4. Refresh XDG caches so the menu entry + icon show up without logout.
+# 7. Refresh XDG caches so the menu entry + icon show up without logout.
 command -v update-desktop-database >/dev/null 2>&1 && \
   update-desktop-database -q || true
 command -v gtk-update-icon-cache    >/dev/null 2>&1 && \

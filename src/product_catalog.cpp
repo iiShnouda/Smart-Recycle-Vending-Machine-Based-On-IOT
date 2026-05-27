@@ -1,7 +1,7 @@
 #include "../include/product_catalog.h"
 #include "../include/database.h"
 #include "../include/logger.h"
-#include "../include/mongo_client.h"
+#include "../include/mqtt_client.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -129,7 +129,8 @@ QVariantMap ProductCatalog::findByName(const QString &name) const
 
 void ProductCatalog::pullFromCloud()
 {
-    // TODO once MongoClient gets a generic listCollection helper. For now
+    // TODO: subscribe to rewingo/+/product_catalog from a fleet-wide
+    // listener server and feed catalog rows back via /cmd. For now,
     // catalog rows reach other kiosks via the Mongo `insertOne` we do in
     // upsertCatalog — a fresh kiosk picks them up by querying its Mongo
     // products view directly. Stub this so QML can still call it.

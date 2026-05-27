@@ -75,7 +75,7 @@ Window {
             // CRITICAL: kill the idle timer BEFORE any page loads so it
             // can't fire mid-admin session. Re-enabled by Exit button.
             Idle.disable()
-            mainStackView.push("qrc:/qt/qml/Recycle_Vending_Machine_LCD/qml/admin/AdminGatePage.qml")
+            mainStackView.push("qrc:/Recycle_Vending_Machine_LCD/qml/admin/AdminGatePage.qml")
         }
     }
 

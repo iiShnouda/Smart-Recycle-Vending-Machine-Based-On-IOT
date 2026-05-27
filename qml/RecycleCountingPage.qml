@@ -82,7 +82,7 @@ Rectangle {
             title: { langTick; return qsTr("Plastic Bottles") }
             pointsEach: 10
             count: countingPage.plasticCount
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
             onIncrement: countingPage.plasticCount++
             onDecrement: if (countingPage.plasticCount > 0) countingPage.plasticCount--
         }
@@ -93,7 +93,7 @@ Rectangle {
             title: { langTick; return qsTr("Aluminum Cans") }
             pointsEach: 15
             count: countingPage.canCount
-            iconSource: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
+            iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
             onIncrement: countingPage.canCount++
             onDecrement: if (countingPage.canCount > 0) countingPage.canCount--
         }

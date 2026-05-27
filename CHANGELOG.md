@@ -5,6 +5,48 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-05-27
+
+### Added
+- `systemd` unit at `/etc/systemd/system/rewingo-backend.service` —
+  Flask backend boots at startup and auto-restarts on crash. No more
+  "open a second terminal" friction.
+- In-app self-update flow on Admin → About:
+  - **Check for updates** button hits the GitHub Releases API.
+  - **Download & install vX.Y.Z** button fetches the .deb asset,
+    spawns `/usr/local/bin/rewingo-update-helper`, and exits cleanly
+    so dpkg can replace the running binary.
+- Visible red **ADMIN** button on MainPage as a manual entry path
+  while the reed switch isn't connected to the STM32 yet.
+- Reed-switch handling moved from Pi GPIO to STM32 over USB-CDC:
+  firmware now pushes unsolicited `DOOR:OPEN` / `DOOR:CLOSED` events.
+- `docs/DATABASE.md` — Atlas setup walkthrough.
+- `docs/RELEASING.md` — how to cut a tagged release with the .deb attached.
+- `/etc/sudoers.d/rewingo` — scoped-down passwordless `dpkg -i` for the
+  update helper, validated with `visudo -c` in postinst.
+
+### Fixed
+- **All Qt resource (qrc) paths.** `qt_add_qml_module`'s actual prefix is
+  `:/Recycle_Vending_Machine_LCD/...` not `:/qt/qml/Recycle_Vending_Machine_LCD/...`.
+  Fixing this restored: translations, the admin-page push, every PNG /
+  GIF / JPG on MainPage and RecycleWaitingPage, and the asset references
+  in `product_image_catalog.cpp`.
+- `TranslationManager` also calls `engine.retranslate()` after
+  `setUiLanguage()` — required in Qt 6.4 to update already-loaded pages.
+- CPack `.deb` was installing files under `/usr/opt/...` and
+  `/usr/usr/local/bin/...`. Fixed by setting
+  `CPACK_PACKAGING_INSTALL_PREFIX "/"` so relative `DESTINATION`s
+  resolve from filesystem root.
+
+### Changed
+- **License switched from MIT to PolyForm Noncommercial 1.0.0.**
+  Source remains visible to everyone; commercial use is reserved.
+- `MongoClient` now points at the local Flask backend (`127.0.0.1:5000`)
+  instead of the deprecated Atlas Data API URL. `BACKEND_API_KEY` is
+  read from `/etc/rewingo/.env`, shared with the Flask process.
+- Window resized from 1080×1920 portrait → no change (still 1080×1920);
+  experiments with 1360×768 landscape and 768×1360 were reverted.
+
 ## [Unreleased]
 
 ### Added

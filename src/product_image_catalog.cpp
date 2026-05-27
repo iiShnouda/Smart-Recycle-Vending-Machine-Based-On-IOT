@@ -48,9 +48,9 @@ void ProductImageCatalog::refresh()
 void ProductImageCatalog::loadPresets()
 {
     // Walk the qrc:/ presets directory. Filenames become display names.
-    const QString prefix = "qrc:/qt/qml/Recycle_Vending_Machine_LCD/"
+    const QString prefix = "qrc:/Recycle_Vending_Machine_LCD/"
                            "resources/assets/products";
-    QDir d(":/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/products");
+    QDir d(":/Recycle_Vending_Machine_LCD/resources/assets/products");
     if (!d.exists()) return;
 
     const auto files = d.entryInfoList(

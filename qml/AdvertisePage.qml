@@ -83,7 +83,7 @@ Item {
 
             MediaPlayer {
                 id: player
-                source: "qrc:/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/ads.jpg"
+                source: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/ads.jpg"
                 loops: MediaPlayer.Infinite
                 autoPlay: true
                 onErrorOccurred: (err, msg) => console.log("[ADS] Video error:", err, msg)

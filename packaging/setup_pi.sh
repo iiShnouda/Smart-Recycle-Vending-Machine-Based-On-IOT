@@ -23,13 +23,14 @@ apt-get install -y \
   build-essential cmake ninja-build pkg-config git \
   qt6-base-dev qt6-declarative-dev \
   qt6-multimedia-dev qt6-serialport-dev qt6-virtualkeyboard-dev \
+  qt6-l10n-tools \
   qml6-module-qtquick qml6-module-qtquick-controls \
   qml6-module-qtquick-layouts qml6-module-qtquick-templates \
   qml6-module-qtquick-window qml6-module-qtmultimedia \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick-virtualkeyboard \
   libopencv-dev \
-  python3 python3-venv python3-pip
+  libmosquitto-dev mosquitto-clients ca-certificates
 
 # Lets non-root run the kiosk against the STM32 USB-CDC without sudo.
 if id -u pi >/dev/null 2>&1; then

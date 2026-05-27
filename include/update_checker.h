@@ -82,6 +82,14 @@ public slots:
      *  collapse to one outstanding request.                              */
     Q_INVOKABLE void checkNow();
 
+    /** Kick off the full self-update flow:
+     *    1. Download the .deb asset from the latest GitHub Release
+     *    2. dpkg -i on it (via sudoers helper — see packaging/sudoers.d/)
+     *    3. Re-exec rewingo so the new binary is running
+     *  Progress is reported via downloadProgress + installStarted /
+     *  installFinished signals. Errors via installFailed.                */
+    Q_INVOKABLE void downloadAndInstall();
+
 signals:
     void latestVersionChanged();
     void lastCheckedAtChanged();
@@ -90,6 +98,13 @@ signals:
      *  banner listens for this; QSettings remembers the last version
      *  the admin acknowledged.                                          */
     void newUpdateDetected(const QString &version, const QString &notes);
+
+    // ── Install-flow events for the UI ──────────────────────────────────
+    void downloadProgress(qint64 received, qint64 total);
+    void installStarted();
+    /** message is empty on success, non-empty on failure. */
+    void installFinished(const QString &message);
+    void installFailed(const QString &reason);
 
 private slots:
     void onReplyFinished();
@@ -105,9 +120,13 @@ private:
     QString                m_latestVersion;
     QString                m_releaseNotes;
     QString                m_releaseUrl;
+    QString                m_assetDownloadUrl;  // .deb asset URL from latest release
     QDateTime              m_lastCheckedAt;
     bool                   m_busy        = false;
     bool                   m_haveInFlight = false;
+
+    void onAssetDownloaded(const QString &localPath);
+    void launchHelperAndExit(const QString &localPath);
 };
 
 #endif // UPDATE_CHECKER_H

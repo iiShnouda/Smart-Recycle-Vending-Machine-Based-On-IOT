@@ -6,8 +6,14 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QSettings>
 #include <QUrl>
+#include <QFile>
+#include <QDir>
+#include <QProcess>
+#include <QCoreApplication>
+#include <QStandardPaths>
 
 // Set in CMakeLists.txt from `project(... VERSION X.Y.Z ...)`. If the
 // build flag is missing we fall back to "0.0.0" — the comparison then
@@ -115,10 +121,24 @@ void UpdateChecker::onReplyFinished()
     const QString notes = obj.value("body").toString();
     const QString url   = obj.value("html_url").toString();
 
+    // Look for an arm64 .deb asset in the release. The download URL is
+    // what we'll fetch when the admin presses "Install update".
+    QString assetUrl;
+    const QJsonArray assets = obj.value("assets").toArray();
+    for (const QJsonValue &av : assets) {
+        const QJsonObject a    = av.toObject();
+        const QString     name = a.value("name").toString();
+        if (name.endsWith("_arm64.deb") || name.endsWith(".deb")) {
+            assetUrl = a.value("browser_download_url").toString();
+            break;
+        }
+    }
+
     const bool changed = (tag != m_latestVersion);
-    m_latestVersion = tag;
-    m_releaseNotes  = notes;
-    m_releaseUrl    = url;
+    m_latestVersion    = tag;
+    m_releaseNotes     = notes;
+    m_releaseUrl       = url;
+    m_assetDownloadUrl = assetUrl;
 
     if (changed) emit latestVersionChanged();
 
@@ -146,6 +166,103 @@ void UpdateChecker::setBusy(bool busy)
     if (m_busy == busy) return;
     m_busy = busy;
     emit busyChanged();
+}
+
+// ─── Self-update flow ─────────────────────────────────────────────────
+//
+// The admin clicks "Install update" on AdminAboutPage. We:
+//   1. GET the .deb asset URL we stashed during checkNow() into /tmp.
+//   2. Hand it off to the rewingo-update-helper script (installed by the
+//      .deb itself in /usr/local/bin) which:
+//        - waits a second for our process to exit
+//        - `sudo dpkg -i /tmp/rewingo_*.deb`
+//        - relaunches /usr/local/bin/rewingo
+//   3. Exit ourselves so dpkg can replace our binary cleanly.
+//
+// The sudoers entry installed by `postinst` allows dpkg -i on rewingo's
+// own package only — see packaging/sudoers.d/rewingo.
+
+void UpdateChecker::downloadAndInstall()
+{
+    if (m_assetDownloadUrl.isEmpty()) {
+        emit installFailed(tr("No .deb asset found in the latest release."));
+        return;
+    }
+
+    const QString tmpDir = QStandardPaths::writableLocation(
+                               QStandardPaths::TempLocation);
+    QDir().mkpath(tmpDir);
+    const QString localPath =
+        tmpDir + "/rewingo_" + m_latestVersion + "_arm64.deb";
+
+    Logger::audit("Updater",
+                  QString("Downloading %1 → %2")
+                      .arg(m_assetDownloadUrl, localPath));
+
+    QNetworkRequest req((QUrl(m_assetDownloadUrl)));
+    req.setHeader(QNetworkRequest::UserAgentHeader, "ReWinGo-Kiosk/1.0");
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply *reply = m_net->get(req);
+
+    connect(reply, &QNetworkReply::downloadProgress,
+            this,  &UpdateChecker::downloadProgress);
+
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, localPath]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit installFailed(tr("Download failed: %1")
+                                   .arg(reply->errorString()));
+            return;
+        }
+        QFile f(localPath);
+        if (!f.open(QIODevice::WriteOnly)) {
+            emit installFailed(tr("Could not open %1 for writing")
+                                   .arg(localPath));
+            return;
+        }
+        f.write(reply->readAll());
+        f.close();
+        onAssetDownloaded(localPath);
+    });
+}
+
+void UpdateChecker::onAssetDownloaded(const QString &localPath)
+{
+    emit installStarted();
+    Logger::audit("Updater",
+                  QString("Download complete, launching helper: %1")
+                      .arg(localPath));
+    launchHelperAndExit(localPath);
+}
+
+void UpdateChecker::launchHelperAndExit(const QString &localPath)
+{
+    // The helper script lives at /usr/local/bin/rewingo-update-helper.
+    // Spawned detached so it survives our exit. The script runs `dpkg -i`
+    // then relaunches /usr/local/bin/rewingo.
+    const QString helper = QStringLiteral("/usr/local/bin/rewingo-update-helper");
+    const QStringList args { localPath };
+
+    qint64 pid = 0;
+    const bool ok =
+        QProcess::startDetached(helper, args, QDir::tempPath(), &pid);
+    if (!ok) {
+        emit installFailed(tr("Could not launch update helper: %1")
+                               .arg(helper));
+        return;
+    }
+    Logger::audit("Updater",
+                  QString("Helper launched (pid=%1); exiting.").arg(pid));
+    emit installFinished(QString());
+
+    // Give the helper a moment to spin up, then exit so dpkg can replace
+    // the running binary. The helper sleeps 1s before dpkg so this race
+    // is safe.
+    QTimer::singleShot(500, []() {
+        QCoreApplication::quit();
+    });
 }
 
 int UpdateChecker::compareSemver(const QString &a, const QString &b) const

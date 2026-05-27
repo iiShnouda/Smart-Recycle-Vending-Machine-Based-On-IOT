@@ -105,5 +105,12 @@ packaging/AdvancedInstaller/output/
 *.msi
 *.exe-cache
 
+# Built Linux packages — upload these to GitHub Releases, don't commit.
+*.deb
+
 # Stray QML helper that's not part of the qt_add_qml_module set
 qml/translations.qml
+
+# Local-only diagnostic / scratch scripts (contain LAN credentials)
+_pi_diag.py
+_pi_*.py

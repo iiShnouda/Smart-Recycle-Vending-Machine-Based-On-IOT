@@ -1,6 +1,6 @@
 #include "../include/database.h"
 #include "../include/logger.h"
-#include "../include/mongo_client.h"
+#include "../include/mqtt_client.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -174,13 +174,13 @@ bool Database::setProductActive(int slot, bool active)
                       active ? "Product re-enabled" : "Product disabled",
                       { {"slot", slot}, {"active", active} });
         /* Push to Mongo with a partial update — same kiosk + slot key. */
-        if (m_mongo && m_mongo->isConfigured()) {
+        if (m_mqtt && m_mqtt->isConnected()) {
             QJsonObject set { {"active",     active},
                               {"kiosk_id",   m_kioskId},
                               {"slot",       slot},
                               {"updated_at", QDateTime::currentDateTimeUtc()
                                                 .toString(Qt::ISODate)} };
-            m_mongo->insertOne("products", set, [](bool, const QJsonObject&){});
+            m_mqtt->publishJson("products", set);
         }
     }
     return ok;
@@ -203,7 +203,7 @@ bool Database::upsertProduct(int slot, const QString &name, int pricePoints,
 
         // Push to MongoDB — tagged with this kiosk's ID so each kiosk's
         // catalog stays separate. Uses upsert (insert-or-update on slot+kiosk).
-        if (m_mongo && m_mongo->isConfigured()) {
+        if (m_mqtt && m_mqtt->isConnected()) {
             QJsonObject filter { {"kiosk_id", m_kioskId}, {"slot", slot} };
             QJsonObject set    { {"name", name},
                                  {"price_points", pricePoints},
@@ -216,7 +216,7 @@ bool Database::upsertProduct(int slot, const QString &name, int pricePoints,
             // Mongo Data API upsert via updateOne — uses "upsert":true.
             // Our minimal client doesn't expose upsert flag yet; fall back
             // to insertOne for a fresh row, ignore failure if exists.
-            m_mongo->insertOne("products", set, [](bool, const QJsonObject&){});
+            m_mqtt->publishJson("products", set);
         }
     }
     return ok;
@@ -315,7 +315,7 @@ QString Database::upsertCatalog(const QVariantMap &row)
                   { {"id", id}, {"name", row.value("name")} });
 
     // Push to Mongo so other kiosks pick it up on their next sync.
-    if (m_mongo && m_mongo->isConfigured()) {
+    if (m_mqtt && m_mqtt->isConnected()) {
         QJsonObject doc {
             {"id",                   id},
             {"name",                 row.value("name").toString()},
@@ -328,8 +328,7 @@ QString Database::upsertCatalog(const QVariantMap &row)
             {"created_kiosk",        m_kioskId},
             {"updated_at",           ts}
         };
-        m_mongo->insertOne("product_catalog", doc,
-                           [](bool, const QJsonObject&){});
+        m_mqtt->publishJson("product_catalog", doc);
     }
     return id;
 }
@@ -486,7 +485,7 @@ bool Database::recordDispenseFault(int slot, const QString &reasonCode,
                       { {"slot", slot}, {"reason", reasonCode},
                         {"before", weightBefore}, {"after", weightAfter},
                         {"drop", drop}, {"index", indexCount} });
-        if (m_mongo && m_mongo->isConfigured()) {
+        if (m_mqtt && m_mqtt->isConnected()) {
             QJsonObject doc {
                 {"kiosk_id",       m_kioskId},
                 {"slot",           slot},
@@ -497,8 +496,7 @@ bool Database::recordDispenseFault(int slot, const QString &reasonCode,
                 {"index_count",    indexCount},
                 {"ts",             ts}
             };
-            m_mongo->insertOne("dispense_faults", doc,
-                               [](bool, const QJsonObject&){});
+            m_mqtt->publishJson("dispense_faults", doc);
         }
     }
     return ok;
@@ -574,7 +572,7 @@ bool Database::recordTransaction(const QString &kind, const QString &userId,
                       { {"user_id",userId}, {"slot",slot}, {"amount",amount} });
 
         // Push to MongoDB tagged with kiosk_id.
-        if (m_mongo && m_mongo->isConfigured()) {
+        if (m_mqtt && m_mqtt->isConnected()) {
             QJsonObject doc {
                 {"kiosk_id", m_kioskId},
                 {"ts",       ts},
@@ -584,7 +582,7 @@ bool Database::recordTransaction(const QString &kind, const QString &userId,
                 {"amount",   amount},
                 {"meta",     QJsonDocument::fromJson(metaJson.toUtf8()).object()}
             };
-            m_mongo->insertOne("transactions", doc, [](bool, const QJsonObject&){});
+            m_mqtt->publishJson("transactions", doc);
         }
     }
     return ok;

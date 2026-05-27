@@ -12,7 +12,7 @@ class Serial_Connection;
 class ReedMonitor;
 class Database;
 class YoloRunner;
-class MongoClient;
+class MqttClient;
 class InventoryScanner;
 
 /**
@@ -145,7 +145,7 @@ private:
     YoloRunner        *m_recycleYolo  = nullptr;
 
     // MongoDB Atlas Data API client
-    MongoClient       *m_mongo        = nullptr;
+    MqttClient        *m_mqtt         = nullptr;
 
     // Inventory scanner — polls HX711 bank, keeps ProductsModel in sync
     InventoryScanner  *m_scanner      = nullptr;

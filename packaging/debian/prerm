@@ -10,10 +10,17 @@ set -e
 
 case "$1" in
   remove|upgrade|deconfigure)
-    # Stop the backend if it's running (no systemd unit yet; just kill
-    # any python process running our server.py).
+    # Stop the systemd service. On `upgrade` postinst restarts it with
+    # the new files; on `remove` it stays down + disabled.
+    if command -v systemctl >/dev/null 2>&1; then
+      if [ "$1" = "remove" ]; then
+        systemctl disable rewingo-backend.service >/dev/null 2>&1 || true
+      fi
+      systemctl stop rewingo-backend.service 2>/dev/null || true
+    fi
+    # Fallback: kill any stray manual instances (e.g. legacy installs
+    # that ran the backend by hand in a terminal).
     if pgrep -f /opt/rewingo/backend/server.py >/dev/null 2>&1; then
-      echo "rewingo: stopping running backend…"
       pkill -f /opt/rewingo/backend/server.py || true
       sleep 1
     fi

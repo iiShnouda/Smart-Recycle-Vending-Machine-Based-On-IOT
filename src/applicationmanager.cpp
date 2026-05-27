@@ -10,7 +10,7 @@
 #include "../include/face_service.h"
 #include "../include/analytics.h"
 #include "../include/logs_viewer.h"
-#include "../include/mongo_client.h"
+#include "../include/mqtt_client.h"
 #include "../include/idle_manager.h"
 #include "../include/product_image_catalog.h"
 #include "../include/inventory_scanner.h"
@@ -20,6 +20,8 @@
 
 #include <QStandardPaths>
 #include <QDir>
+#include <QFile>
+#include <QProcess>
 #include <QSettings>
 #include <QUuid>
 
@@ -170,11 +172,14 @@ void ApplicationManager::initialize()
     }
 
     // ── Reed switch monitor ────────────────────────────────────────────
+    // The reed switch lives on the STM32, not Pi GPIO. We kept the
+    // ReedMonitor class around as a dev fallback (triggerForDev()) but no
+    // longer wire it to a real GPIO line — the STM32 pushes DOOR:OPEN /
+    // DOOR:CLOSED on the USB-CDC stream and we listen for those below.
     m_reed = new ReedMonitor(this);
     connect(m_reed, &ReedMonitor::adminRequested,
             this,   &ApplicationManager::adminRequested);
-    // Reed pin (BCM GPIO 22 by default — change to match your wiring).
-    m_reed->start(22, true);
+    // m_reed->start(22, true);   // ← DISABLED: reed is on STM32, not Pi
 
     // ── Inventory scanner ──────────────────────────────────────────────
     // Created AFTER products model + database are wired so the boot scan
@@ -183,13 +188,20 @@ void ApplicationManager::initialize()
     m_scanner = new InventoryScanner(this, this);
     m_scanner->start();
 
-    // Door-closed → assume admin just restocked. Force a fresh scan tagged
-    // "admin" so restock_events gets a row per slot that changed.
-    connect(m_reed, &ReedMonitor::magnetStateChanged,
-            this,   [this](bool present) {
-        if (!present || !m_scanner) return;       // we only care about close
-        Logger::info("Inventory", "Admin door closed — rescan");
-        m_scanner->rescanNow("admin");
+    // STM32 reed events. The firmware pushes "DOOR:OPEN" when the magnet
+    // leaves and "DOOR:CLOSED" when it returns. We listen via serialReply
+    // (every line, ack or not) so admins can:
+    //   - OPEN  → enter admin mode (same effect as ReedMonitor::adminRequested)
+    //   - CLOSED → trigger an inventory rescan tagged "admin"
+    connect(this, &ApplicationManager::serialReply, this,
+            [this](const QString &line) {
+        if (line.startsWith("DOOR:OPEN")) {
+            Logger::audit("Reed", "Admin door opened (STM32)");
+            emit adminRequested();
+        } else if (line.startsWith("DOOR:CLOSED")) {
+            Logger::info("Inventory", "Admin door closed (STM32) — rescan");
+            if (m_scanner) m_scanner->rescanNow("admin");
+        }
     });
 
     // ── YOLO models + face service ─────────────────────────────────────
@@ -212,17 +224,58 @@ void ApplicationManager::initialize()
         }
     }
 
-    // ── MongoDB Atlas Data API client ─────────────────────────────────
-    m_mongo = new MongoClient(this);
-    if (m_database) m_database->setMongoClient(m_mongo);
-    // TODO: replace with your real Atlas values:
-    //   1. Atlas → "Data API" → enable, get the endpoint URL
-    //   2. Atlas → "API Keys" → create one with rwManageBuiltin role
-     m_mongo->configure(
-    "https://data.mongodb-api.com/app/data-XXXXX/endpoint/data/v1",
-    "al-sbP47gMCPkSSrT1QvBejTR_gqCH8cAWyVHL8ypPb-1m",
-    "Cluster0",
-    "rewingo");
+    // ── MQTT client ────────────────────────────────────────────────────
+    //
+    // The kiosk publishes telemetry over MQTT directly — no Flask backend,
+    // no MongoDB driver baked in. A subscriber on the cloud / your phone /
+    // a dashboard listens on rewingo/<kiosk-id>/# for everything.
+    //
+    // Broker host + credentials live in /etc/rewingo/.env so they can be
+    // changed without rebuilding. Keys we read (all optional):
+    //   MQTT_HOST     mosquitto broker hostname              (no default)
+    //   MQTT_PORT     port; 8883 for TLS, 1883 for plain     (default 8883)
+    //   MQTT_USERNAME (no default)
+    //   MQTT_PASSWORD (no default)
+    //   MQTT_TLS      "1"/"0" — toggle TLS                   (default "1")
+    //
+    // If MQTT_HOST is empty the kiosk runs offline-only — SQLite still
+    // captures every event locally; nothing leaves the box.
+    m_mqtt = new MqttClient(this);
+    if (m_database) m_database->setMqttClient(m_mqtt);
+
+    QString mqttHost, mqttUser, mqttPass;
+    int     mqttPort = 8883;
+    bool    mqttTls  = true;
+    {
+        QFile env("/etc/rewingo/.env");
+        if (env.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            while (!env.atEnd()) {
+                QString line = QString::fromUtf8(env.readLine()).trimmed();
+                if (line.isEmpty() || line.startsWith('#')) continue;
+                const int eq = line.indexOf('=');
+                if (eq < 0) continue;
+                const QString key = line.left(eq).trimmed();
+                QString       val = line.mid(eq + 1).trimmed();
+                if (val.startsWith('"') && val.endsWith('"'))
+                    val = val.mid(1, val.size() - 2);
+                if      (key == "MQTT_HOST")     mqttHost = val;
+                else if (key == "MQTT_PORT")     mqttPort = val.toInt();
+                else if (key == "MQTT_USERNAME") mqttUser = val;
+                else if (key == "MQTT_PASSWORD") mqttPass = val;
+                else if (key == "MQTT_TLS")      mqttTls  = (val != "0");
+            }
+        }
+    }
+
+    if (mqttHost.isEmpty()) {
+        qWarning() << "[INIT] MQTT_HOST not set in /etc/rewingo/.env — "
+                      "running offline (telemetry won't reach the cloud).";
+    } else {
+        m_mqtt->configure(mqttHost, mqttPort, mqttUser, mqttPass,
+                          m_kioskId, mqttTls);
+        m_mqtt->setTopicBase(QStringLiteral("rewingo/") + m_kioskId);
+        m_mqtt->connectToBroker();
+    }
 
     // ── Update checker ─────────────────────────────────────────────────
     // Owner/name as it appears in the GitHub URL — bake yours in here,
@@ -231,7 +284,7 @@ void ApplicationManager::initialize()
         QSettings s;
         const QString repo =
             s.value("updater/repo",
-                    QStringLiteral("YOUR_USER/rewingo")).toString();
+                    QStringLiteral("iiShnouda/Smart-Recycle-Vending-Machine-Based-On-IOT")).toString();
         UpdateChecker::s_instance->configure(repo);
         // Delay the first hit by 5 s so it doesn't share CPU with USB
         // enumeration. After that, every 6 h.
@@ -268,8 +321,11 @@ void ApplicationManager::selectLanguage(const QString &languageCode)
 void ApplicationManager::onTranslationLoaded(const QString &languageCode)
 {
     if (m_qmlEngine) {
-        // Triggers retranslation in QQmlApplicationEngine — every qsTr() re-runs.
+        // setUiLanguage updates the locale used by qsTr; retranslate() walks
+        // every bound qsTr() expression and re-evaluates it. We call both —
+        // in Qt 6.4 setUiLanguage alone doesn't always rebind existing pages.
         m_qmlEngine->setUiLanguage(languageCode);
+        m_qmlEngine->retranslate();
     }
     emit languageChanged(languageCode);
 }
