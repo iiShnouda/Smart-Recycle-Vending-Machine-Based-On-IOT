@@ -1,6 +1,9 @@
 # This file is used to ignore files which are generated
 # ----------------------------------------------------------------------------
 
+# No docs in the public repo (kept locally only if you recreate the folder).
+/docs/
+
 *~
 *.autosave
 *.a
