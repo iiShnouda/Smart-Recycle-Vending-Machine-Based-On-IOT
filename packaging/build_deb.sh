@@ -27,6 +27,24 @@ echo " ReWinGo .deb build"
 echo " Project root: $PROJECT_ROOT"
 echo "═══════════════════════════════════════════════════════════════"
 
+# Compile .ts → .qm before cmake configure: the CMakeLists adds the
+# .qm files as qrc resources directly (not via qt_add_translations) so
+# they must exist on disk at configure time. They're gitignored
+# because they're build artifacts, so a fresh clone is missing them.
+echo "── Compiling translations (lrelease) ──"
+for ts in "$PROJECT_ROOT"/resources/translations/*.ts; do
+  [ -f "$ts" ] || continue
+  qm="${ts%.ts}.qm"
+  # Try Qt6's lrelease first, fall back to the unversioned binary.
+  if command -v /usr/lib/qt6/bin/lrelease >/dev/null 2>&1; then
+    /usr/lib/qt6/bin/lrelease "$ts" -qm "$qm"
+  elif command -v lrelease-qt6 >/dev/null 2>&1; then
+    lrelease-qt6 "$ts" -qm "$qm"
+  else
+    lrelease "$ts" -qm "$qm"
+  fi
+done
+
 cmake -S "$PROJECT_ROOT" -B "$BUILD_DIR" \
       -DCMAKE_BUILD_TYPE=Release \
       -DUSE_OPENCV=ON
