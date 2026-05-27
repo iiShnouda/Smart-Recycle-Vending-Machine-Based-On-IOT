@@ -14,8 +14,11 @@ BUILD_DIR="$PROJECT_ROOT/build"
 cd "$PROJECT_ROOT"
 
 # Maintainer scripts must be executable. Git on Windows strips +x —
-# re-apply here so the .deb gets the right perms.
-chmod +x packaging/rewingo.sh packaging/rewingo-backend.sh
+# re-apply here so the .deb gets the right perms. We no longer ship
+# the Flask backend or its launcher (rewingo-backend.sh) since the
+# MQTT switch — only the kiosk launcher and the self-update helper.
+chmod +x packaging/rewingo.sh
+chmod +x packaging/rewingo-update-helper.sh 2>/dev/null || true
 chmod +x packaging/debian/postinst packaging/debian/prerm
 chmod +x packaging/setup_pi.sh
 
