@@ -49,7 +49,13 @@ cmake -S "$PROJECT_ROOT" -B "$BUILD_DIR" \
       -DCMAKE_BUILD_TYPE=Release \
       -DUSE_OPENCV=ON
 
-cmake --build "$BUILD_DIR" -j
+# Parallelism: a Pi 4 with 4 GB RAM gets OOM-killed (and sometimes
+# panic-reboots) when 4 g++ instances all link Qt + OpenCV in
+# parallel. -j2 keeps peak RSS under control. Override with the
+# JOBS env var if you have a Pi 5 / lots of swap.
+JOBS="${JOBS:-2}"
+echo "── Compiling with -j${JOBS} (raise via JOBS=4 if you have RAM) ──"
+cmake --build "$BUILD_DIR" -j"${JOBS}"
 
 # CPack reads the DEB block in CMakeLists.txt and produces the file.
 cmake --build "$BUILD_DIR" --target package
