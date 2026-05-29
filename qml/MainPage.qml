@@ -102,17 +102,32 @@ Rectangle {
 
             // Admin button (red — distinct from the customer-facing controls).
             Rectangle {
+                id: adminBtn
                 width: 90
                 height: 90
                 radius: 45
                 color: "#DC2626"
 
+                // Tactile press: shrink with a little overshoot on release.
+                scale: adminTap.pressed ? 0.90 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                 TapHandler {
+                    id: adminTap
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                     onTapped: {
                         bumpIdle()
                         appManager.devTriggerAdmin()
                     }
+                }
+
+                // White flash overlay while held — the "ink" feel.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "#FFFFFF"
+                    opacity: adminTap.pressed ? 0.22 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 Text {
@@ -126,14 +141,21 @@ Rectangle {
 
             // Exit button.
             Rectangle {
+                id: exitBtn
                 width: 90
                 height: 90
                 radius: 45
-                color: "#FFFFFF"
+                color: exitTap.pressed ? "#EEF1E8" : "#FFFFFF"
                 border.width: 2
-                border.color: "#D8E0CF"
+                border.color: exitTap.pressed ? "#0891B2" : "#D8E0CF"
+
+                scale: exitTap.pressed ? 0.90 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                 TapHandler {
+                    id: exitTap
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                     onTapped: exitToHome()
                 }
@@ -264,12 +286,18 @@ Rectangle {
             width: 90
             height: 90
             radius: 45
-            color: "#FFFFFF"
+            color: backTap.pressed ? "#EEF1E8" : "#FFFFFF"
             border.width: 2
-            border.color: "#D8E0CF"
+            border.color: backTap.pressed ? "#0891B2" : "#D8E0CF"
             z: 10
 
+            scale: backTap.pressed ? 0.90 : 1.0
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on border.color { ColorAnimation { duration: 120 } }
+
             TapHandler {
+                id: backTap
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                 onTapped: {
                     bumpIdle()
@@ -399,9 +427,22 @@ Rectangle {
                         color: "#1A1D1A"
                         anchors.horizontalCenter: parent.horizontalCenter
 
+                        scale: continueTap.pressed ? 0.95 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                         TapHandler {
+                            id: continueTap
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                             onTapped: confirmRecycle()
+                        }
+
+                        // Press flash overlay.
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "#FFFFFF"
+                            opacity: continueTap.pressed ? 0.16 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
 
                         Row {
@@ -439,7 +480,13 @@ Rectangle {
         property string iconSource: ""
         signal tapped()
 
+        // Press feedback: the whole card dips slightly and its border
+        // lights up in the ice-blue accent while held.
+        scale: tileTap.pressed ? 0.975 : 1.0
+        Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutBack } }
+
         TapHandler {
+            id: tileTap
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
             onTapped: {
                 mainRect.bumpIdle()
@@ -462,9 +509,11 @@ Rectangle {
             anchors.fill: parent
             radius: 40
             color: "#FFFFFF"
-            border.width: 2
-            border.color: "#D8E0CF"
+            border.width: tileTap.pressed ? 4 : 2
+            border.color: tileTap.pressed ? "#0891B2" : "#D8E0CF"
             LayoutMirroring.enabled: false
+            Behavior on border.color { ColorAnimation { duration: 130 } }
+            Behavior on border.width { NumberAnimation { duration: 130 } }
 
             Rectangle {
                 width: 8
