@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Core Gui Quick QuickControls2 Qml SerialPort Sql Network Multimedia
-    VirtualKeyboard)
+    VirtualKeyboard Quick3D)
 
 # Optional OpenCV — set USE_OPENCV=ON to enable real YOLO inference.
 option(USE_OPENCV "Enable OpenCV for YOLO" OFF)
@@ -83,6 +83,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
 
         components/FaceIdIcon.qml
         components/RwgCoin.qml
+        components/Coin3D.qml
     SOURCES
         include/applicationmanager.h    src/applicationmanager.cpp
         include/translationmanager.h    src/translationmanager.cpp
@@ -113,6 +114,8 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         resources/assets/Recycle1.gif
         resources/assets/Vending1.gif
         resources/assets/rwg-coin.png
+        resources/assets/coin3d/coin.mesh
+        resources/assets/coin3d/coin.png
         resources/translations/Recycle_Vending_Machine_LCD_en_US.qm
         resources/translations/Recycle_Vending_Machine_LCD_ar_EG.qm
 )
@@ -140,6 +143,7 @@ target_link_libraries(appRecycle_Vending_Machine_LCD PRIVATE
     Qt6::Network
     Qt6::Multimedia
     Qt6::VirtualKeyboard
+    Qt6::Quick3D
 )
 
 # MQTT pipe — only link + flag it in when libmosquitto was found.
@@ -292,6 +296,8 @@ set(REWINGO_DEB_DEPS
     qml6-module-qtmultimedia
     qml6-module-qt-labs-settings
     qml6-module-qtquick-virtualkeyboard
+    qml6-module-qtquick3d
+    libqt6quick3d6
     libopencv-dev
     libmosquitto1
     ca-certificates

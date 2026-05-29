@@ -149,9 +149,10 @@ Rectangle {
                 id: pointsRow
                 anchors.centerIn: parent
                 spacing: 14
-                RwgCoin {
+                Coin3D {
                     anchors.verticalCenter: parent.verticalCenter
-                    size: 72
+                    size: 104
+                    transparentBg: true
                 }
                 Text { text: vendingPage.userPoints - cartTotal()
                        color: "#FFFFFF"

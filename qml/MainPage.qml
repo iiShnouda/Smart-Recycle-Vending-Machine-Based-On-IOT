@@ -74,10 +74,12 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 12
 
-                // Animated RWG reward coin.
-                RwgCoin {
+                // Animated 3D RWG reward coin (transparent → dark pill shows
+                // through). For a solid backdrop: transparentBg:false; bgColor:"#..."
+                Coin3D {
                     anchors.verticalCenter: parent.verticalCenter
-                    size: 64
+                    size: 92
+                    transparentBg: true
                 }
 
                 Text {
