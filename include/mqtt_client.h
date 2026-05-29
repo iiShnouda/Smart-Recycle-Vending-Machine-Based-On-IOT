@@ -5,6 +5,9 @@
 #include <QQmlEngine>
 #include <QString>
 #include <QByteArray>
+#include <QJsonObject>   // publishJson() is a slot taking const QJsonObject& —
+                          // moc needs the COMPLETE type to register its metatype
+                          // (Qt 6.11's moc errors where 6.8 was lenient).
 #include <atomic>
 
 struct mosquitto;          // forward decl from libmosquitto
