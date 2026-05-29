@@ -313,15 +313,15 @@ Rectangle {
                    color: "#5A6B52"; font.pixelSize: 14 }
             Text { text: "•  Open Food Facts (Open Database License)"
                    color: "#5A6B52"; font.pixelSize: 14 }
-            Text { text: "•  MongoDB Atlas (cloud sync)"
+            Text { text: "•  MQTT (HiveMQ / EMQX / Mosquitto)"
                    color: "#5A6B52"; font.pixelSize: 14 }
 
             Rectangle { width: parent.width; height: 1; color: "#D8E0CF" }
 
-            Text { text: qsTr("License: MIT — © 2026 ReWinGo Contributors")
+            Text { text: qsTr("License: PolyForm Noncommercial 1.0.0 — © 2026 ReWinGo Contributors")
                    color: "#1F2A1B"
                    font.pixelSize: 13; font.weight: Font.Bold }
-            Text { text: qsTr("github.com/YOUR_USER/rewingo")
+            Text { text: qsTr("github.com/iiShnouda/Smart-Recycle-Vending-Machine-Based-On-IOT")
                    color: "#0891B2"
                    font.pixelSize: 13 }
         }
