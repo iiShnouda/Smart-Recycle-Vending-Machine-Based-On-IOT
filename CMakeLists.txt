@@ -226,7 +226,25 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "ReWinGo recycling + vending kiosk")
 set(CPACK_DEBIAN_PACKAGE_SECTION          "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY         "optional")
-set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE     "arm64")    # Pi 4 / Pi 5
+
+# Architecture: ask dpkg what we're actually building for instead of
+# hardcoding "arm64". This makes the .deb label match the real binary:
+#   - native build on an arm64 host (Pi, arm64 Ubuntu)  → arm64
+#   - native build on an amd64 host (x86 PC/laptop)      → amd64
+#   - inside a `--platform linux/arm64` Docker container → arm64
+# Hardcoding arm64 on an x86 host produces a mislabeled package that
+# installs on the Pi then crashes with "Exec format error".
+find_program(DPKG_CMD dpkg)
+if(DPKG_CMD)
+    execute_process(COMMAND ${DPKG_CMD} --print-architecture
+                    OUTPUT_VARIABLE DEB_HOST_ARCH
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+if(NOT DEB_HOST_ARCH)
+    set(DEB_HOST_ARCH "arm64")   # sensible default for the Pi target
+endif()
+set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE     "${DEB_HOST_ARCH}")
+message(STATUS "Packaging .deb for architecture: ${DEB_HOST_ARCH}")
 
 # Use the Debian-standard file naming:  <name>_<version>_<arch>.deb
 # (default would be the generic "<name>-<version>-Linux.deb").
