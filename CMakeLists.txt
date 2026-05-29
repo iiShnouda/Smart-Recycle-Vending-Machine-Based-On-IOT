@@ -82,6 +82,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         components/PrimaryButton.qml
 
         components/FaceIdIcon.qml
+        components/RwgCoin.qml
     SOURCES
         include/applicationmanager.h    src/applicationmanager.cpp
         include/translationmanager.h    src/translationmanager.cpp
@@ -111,6 +112,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         resources/assets/plastic-bottle.png
         resources/assets/Recycle1.gif
         resources/assets/Vending1.gif
+        resources/assets/rwg-coin.png
         resources/translations/Recycle_Vending_Machine_LCD_en_US.qm
         resources/translations/Recycle_Vending_Machine_LCD_ar_EG.qm
 )

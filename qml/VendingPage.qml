@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../components"
 
 /*
  * VendingPage — all 8 slots, 4 per page, swipeable with page dots.
@@ -148,6 +149,10 @@ Rectangle {
                 id: pointsRow
                 anchors.centerIn: parent
                 spacing: 14
+                RwgCoin {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: 72
+                }
                 Text { text: vendingPage.userPoints - cartTotal()
                        color: "#FFFFFF"
                        font.pixelSize: 50; font.weight: Font.Black

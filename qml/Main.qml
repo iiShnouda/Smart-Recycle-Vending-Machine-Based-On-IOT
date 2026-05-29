@@ -38,13 +38,34 @@ Window {
         anchors.fill: parent
         initialItem: sleepModeComponent
 
+        // ── Morph transitions (cross-fade + scale, Material "shared-axis Z") ──
+        // The incoming page grows in from slightly small while the outgoing
+        // one zooms out and fades — reads as one screen morphing into the
+        // next rather than a hard cut. Applied to every push/pop, so the
+        // whole app (MainPage → VendingPage, admin, recycle, …) animates.
         pushEnter: Transition {
-            NumberAnimation { property: "x"; from: width; to: 0; duration: 220; easing.type: Easing.OutCubic }
-            NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 180 }
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 260; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "scale";   from: 0.92; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+            }
+        }
+        pushExit: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 200; easing.type: Easing.InCubic }
+                NumberAnimation { property: "scale";   from: 1.0; to: 1.08; duration: 320; easing.type: Easing.InCubic }
+            }
+        }
+        popEnter: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 260; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "scale";   from: 1.08; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+            }
         }
         popExit: Transition {
-            NumberAnimation { property: "x"; from: 0; to: width; duration: 220; easing.type: Easing.InCubic }
-            NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 160 }
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 200; easing.type: Easing.InCubic }
+                NumberAnimation { property: "scale";   from: 1.0; to: 0.92; duration: 320; easing.type: Easing.InCubic }
+            }
         }
 
         // Reset idle timer every time we navigate between pages.

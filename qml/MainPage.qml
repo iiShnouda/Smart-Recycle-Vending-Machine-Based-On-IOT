@@ -74,6 +74,12 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 12
 
+                // Animated RWG reward coin.
+                RwgCoin {
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: 64
+                }
+
                 Text {
                     text: mainRect.userPoints
                     color: "#00E5FF"
