@@ -20,11 +20,22 @@ if (USE_OPENCV)
 endif()
 
 # libmosquitto — the kiosk's MQTT pipe. apt: libmosquitto-dev.
+# OPTIONAL, like OpenCV above. When present (Pi / Ubuntu) the real MQTT
+# pipe links in. When absent (e.g. a Windows dev build just to run the
+# UI) MQTT compiles out via the HAVE_MOSQUITTO guard and telemetry is
+# silently dropped — the kiosk still runs. This is why it's a warning,
+# not a hard error: you can build the UI anywhere.
 find_path(MOSQUITTO_INCLUDE_DIR mosquitto.h)
 find_library(MOSQUITTO_LIBRARY NAMES mosquitto)
-if (NOT MOSQUITTO_INCLUDE_DIR OR NOT MOSQUITTO_LIBRARY)
-    message(FATAL_ERROR
-        "libmosquitto not found. Install with: sudo apt install libmosquitto-dev")
+if (MOSQUITTO_INCLUDE_DIR AND MOSQUITTO_LIBRARY)
+    set(HAVE_MOSQUITTO TRUE)
+    message(STATUS "libmosquitto found — MQTT enabled (${MOSQUITTO_LIBRARY})")
+else()
+    set(HAVE_MOSQUITTO FALSE)
+    message(WARNING
+        "libmosquitto NOT found — building WITHOUT the MQTT pipe. "
+        "Telemetry will be dropped. For the real pipe (Pi/Ubuntu) install "
+        "it with: sudo apt install libmosquitto-dev")
 endif()
 
 # Lowered from 6.11 to 6.4 so the project builds against whichever Qt 6
@@ -107,7 +118,6 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
 target_include_directories(appRecycle_Vending_Machine_LCD PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${MOSQUITTO_INCLUDE_DIR}
 )
 
 set_target_properties(appRecycle_Vending_Machine_LCD PROPERTIES
@@ -128,8 +138,17 @@ target_link_libraries(appRecycle_Vending_Machine_LCD PRIVATE
     Qt6::Network
     Qt6::Multimedia
     Qt6::VirtualKeyboard
-    ${MOSQUITTO_LIBRARY}
 )
+
+# MQTT pipe — only link + flag it in when libmosquitto was found.
+if (HAVE_MOSQUITTO)
+    target_link_libraries(appRecycle_Vending_Machine_LCD PRIVATE
+        ${MOSQUITTO_LIBRARY})
+    target_include_directories(appRecycle_Vending_Machine_LCD PRIVATE
+        ${MOSQUITTO_INCLUDE_DIR})
+    target_compile_definitions(appRecycle_Vending_Machine_LCD PRIVATE
+        HAVE_MOSQUITTO)
+endif()
 
 if (USE_OPENCV)
     target_link_libraries(appRecycle_Vending_Machine_LCD PRIVATE

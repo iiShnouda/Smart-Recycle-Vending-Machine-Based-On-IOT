@@ -4,7 +4,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
+
+// HAVE_MOSQUITTO is defined by CMake only when libmosquitto-dev was found.
+// Without it (e.g. a Windows dev build to run the UI) every method below
+// becomes a no-op stub and telemetry is silently dropped — the kiosk
+// still launches and works offline.
+#ifdef HAVE_MOSQUITTO
 #include <mosquitto.h>
+#endif
 
 MqttClient *MqttClient::s_instance = nullptr;
 
@@ -12,18 +19,25 @@ MqttClient::MqttClient(QObject *parent) : QObject(parent)
 {
     if (!s_instance) s_instance = this;
 
+#ifdef HAVE_MOSQUITTO
     // libmosquitto's process-wide init. Safe to call once at startup.
     mosquitto_lib_init();
+#else
+    Logger::warn("Mqtt",
+                 "Built without libmosquitto — MQTT disabled, telemetry dropped");
+#endif
 }
 
 MqttClient::~MqttClient()
 {
+#ifdef HAVE_MOSQUITTO
     if (m_handle) {
         mosquitto_loop_stop(m_handle, /*force*/ true);
         mosquitto_destroy(m_handle);
         m_handle = nullptr;
     }
     mosquitto_lib_cleanup();
+#endif
 }
 
 // ── Configuration ─────────────────────────────────────────────────────────
@@ -51,6 +65,10 @@ void MqttClient::setTopicBase(const QString &base)
 
 void MqttClient::connectToBroker()
 {
+#ifndef HAVE_MOSQUITTO
+    Logger::warn("Mqtt", "connectToBroker: built without libmosquitto — no-op");
+    return;
+#else
     if (m_host.isEmpty()) {
         Logger::warn("Mqtt", "No host configured; refusing to connect");
         return;
@@ -132,10 +150,12 @@ void MqttClient::connectToBroker()
     // keepalives + reconnects. Saves us from running mosquitto_loop()
     // on a QTimer.
     mosquitto_loop_start(m_handle);
+#endif // HAVE_MOSQUITTO
 }
 
 void MqttClient::disconnectFromBroker()
 {
+#ifdef HAVE_MOSQUITTO
     if (!m_handle) return;
     // Publish a clean "offline" before tearing down (overrides the LWT
     // which would fire only on dirty disconnect).
@@ -150,6 +170,7 @@ void MqttClient::disconnectFromBroker()
     mosquitto_destroy(m_handle);
     m_handle = nullptr;
     m_connected.store(false);
+#endif // HAVE_MOSQUITTO
 }
 
 // ── Publish ───────────────────────────────────────────────────────────────
@@ -157,6 +178,10 @@ void MqttClient::disconnectFromBroker()
 void MqttClient::publish(const QString &suffix, const QString &payload,
                          int qos, bool retain)
 {
+#ifndef HAVE_MOSQUITTO
+    Q_UNUSED(suffix); Q_UNUSED(payload); Q_UNUSED(qos); Q_UNUSED(retain);
+    return;
+#else
     if (!m_handle || !m_connected.load()) {
         // Drop messages while disconnected. We could buffer them, but
         // most telemetry is better lost than replayed minutes later.
@@ -171,6 +196,7 @@ void MqttClient::publish(const QString &suffix, const QString &payload,
         Logger::warn("Mqtt", QString("publish %1 failed: %2")
                      .arg(topic, mosquitto_strerror(rc)));
     }
+#endif // HAVE_MOSQUITTO
 }
 
 void MqttClient::publishJson(const QString &suffix, const QJsonObject &doc,
@@ -185,6 +211,9 @@ void MqttClient::publishJson(const QString &suffix, const QJsonObject &doc,
 
 void MqttClient::onConnectCb(struct mosquitto *m, void *self, int rc)
 {
+#ifndef HAVE_MOSQUITTO
+    Q_UNUSED(m); Q_UNUSED(self); Q_UNUSED(rc);
+#else
     auto *c = static_cast<MqttClient *>(self);
     const bool ok = (rc == 0);
     if (ok) {
@@ -210,10 +239,14 @@ void MqttClient::onConnectCb(struct mosquitto *m, void *self, int rc)
     // Hop back to Qt thread to emit the signal safely.
     QMetaObject::invokeMethod(c, "emitConnected", Qt::QueuedConnection,
                               Q_ARG(bool, ok));
+#endif // HAVE_MOSQUITTO
 }
 
 void MqttClient::onDisconnectCb(struct mosquitto *, void *self, int rc)
 {
+#ifndef HAVE_MOSQUITTO
+    Q_UNUSED(self); Q_UNUSED(rc);
+#else
     auto *c = static_cast<MqttClient *>(self);
     Logger::info("Mqtt", QString("Disconnected (rc=%1)").arg(rc));
     c->m_connected.store(false);
@@ -221,11 +254,15 @@ void MqttClient::onDisconnectCb(struct mosquitto *, void *self, int rc)
                               Q_ARG(bool, false));
     // libmosquitto auto-reconnects (mosquitto_reconnect_delay_set above);
     // we don't have to do anything here.
+#endif
 }
 
 void MqttClient::onMessageCb(struct mosquitto *, void *self,
                              const struct mosquitto_message *msg)
 {
+#ifndef HAVE_MOSQUITTO
+    Q_UNUSED(self); Q_UNUSED(msg);
+#else
     if (!msg || !msg->topic) return;
     auto *c = static_cast<MqttClient *>(self);
     const QString topic = QString::fromUtf8(msg->topic);
@@ -235,6 +272,7 @@ void MqttClient::onMessageCb(struct mosquitto *, void *self,
     QMetaObject::invokeMethod(c, "emitMessage", Qt::QueuedConnection,
                               Q_ARG(QString, topic),
                               Q_ARG(QString, payload));
+#endif
 }
 
 // ── Qt-thread emitters ────────────────────────────────────────────────────
