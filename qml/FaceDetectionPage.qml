@@ -64,7 +64,12 @@ Rectangle {
         running: cam.active && status === 0 && FaceRec.running
         repeat: true
         onTriggered: {
-            const img = videoOut.videoSink.videoFrame.toImage()
+            // videoSink + videoFrame come up a few hundred ms AFTER the
+            // camera is told to activate, so guard everything here.
+            if (!videoOut.videoSink) return
+            const frame = videoOut.videoSink.videoFrame
+            if (!frame || !frame.isValid) return
+            const img = frame.toImage()
             if (img && !img.isNull) FaceRec.feedFrame(img)
         }
     }
@@ -159,21 +164,22 @@ Rectangle {
     Item {
         id: ring
         anchors.centerIn: parent
-        width: 540; height: 540
+        width: 760; height: 760
 
-        // The iPhone Face ID icon, scaled to the full ring area.
+        // The iPhone Face ID brackets only — no scanning line.
         FaceIdIcon {
             anchors.fill: parent
             color: status === 1 ? "#16A34A"
                  : status === 2 ? "#DC2626" : "#0891B2"
-            scanLine: status === 0
+            scanLine: false
         }
 
-        // Circular live camera in the middle (covers the icon's face).
+        // Circular live camera fills most of the brackets so the user
+        // sees a big, clear preview of their own face.
         Rectangle {
             anchors.centerIn: parent
-            width: parent.width  * 0.62
-            height: parent.height * 0.62
+            width: parent.width  * 0.80
+            height: parent.height * 0.80
             radius: width / 2
             color: "#1A1D1A"
             clip: true

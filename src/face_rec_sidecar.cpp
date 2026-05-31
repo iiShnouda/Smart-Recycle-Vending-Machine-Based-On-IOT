@@ -15,6 +15,15 @@ FaceRecSidecar::FaceRecSidecar(QObject *parent) : QObject(parent)
     if (!s_instance) s_instance = this;
 }
 
+FaceRecSidecar::~FaceRecSidecar()
+{
+    // Make sure the Python child isn't still draining when the singleton
+    // dies (kiosk shutdown) — otherwise Qt logs "QProcess: Destroyed
+    // while process is still running" and the OS keeps a zombie.
+    cancel();
+    if (s_instance == this) s_instance = nullptr;
+}
+
 bool FaceRecSidecar::isRunning() const
 {
     return m_proc && m_proc->state() != QProcess::NotRunning;
@@ -140,9 +149,19 @@ void FaceRecSidecar::enroll(const QString &name)
 
 void FaceRecSidecar::cancel()
 {
-    if (m_proc && m_proc->state() != QProcess::NotRunning) {
-        Logger::info("FaceRec", "Cancel — killing sidecar");
+    if (!m_proc || m_proc->state() == QProcess::NotRunning) return;
+
+    Logger::info("FaceRec", "Cancel — closing sidecar");
+    // 1) Send the EOS sentinel (length 0) so the sidecar's read_frame()
+    //    loop exits cleanly. closeWriteChannel() also closes the pipe.
+    const quint32 eos = 0;
+    m_proc->write(reinterpret_cast<const char *>(&eos), 4);
+    m_proc->closeWriteChannel();
+    // 2) Give it a beat to exit on its own.
+    if (!m_proc->waitForFinished(400)) {
+        // 3) Force-kill if it didn't.
         m_proc->kill();
+        m_proc->waitForFinished(400);
     }
 }
 

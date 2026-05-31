@@ -47,6 +47,7 @@ class FaceRecSidecar : public QObject {
 
 public:
     explicit FaceRecSidecar(QObject *parent = nullptr);
+    ~FaceRecSidecar() override;
     static FaceRecSidecar *create(QQmlEngine *, QJSEngine *) { return s_instance; }
     static FaceRecSidecar *s_instance;
 
