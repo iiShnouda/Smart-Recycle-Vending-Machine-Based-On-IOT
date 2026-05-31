@@ -128,6 +128,7 @@ void FaceRecSidecar::identify()
     m_stage.clear();
     m_blinkCount    = 0;
     m_blinkRequired = 2;
+    m_framesSent    = 0;
     emit stageChanged();
     setStatus(tr("Look at the camera…"));
     // -u = unbuffered I/O so JSON events surface immediately and our
@@ -257,8 +258,16 @@ void FaceRecSidecar::onErrorOccurred(QProcess::ProcessError err)
 
 void FaceRecSidecar::feedFrame(const QImage &img)
 {
-    if (!m_proc || m_proc->state() != QProcess::Running) return;
-    if (img.isNull()) return;
+    if (!m_proc || m_proc->state() != QProcess::Running) {
+        if (m_framesSent == 0)
+            Logger::warn("FaceRec", "feedFrame: process not running");
+        return;
+    }
+    if (img.isNull()) {
+        if (m_framesSent == 0)
+            Logger::warn("FaceRec", "feedFrame: img is null");
+        return;
+    }
 
     // Encode the QImage as JPEG into a memory buffer.
     QByteArray jpeg;
@@ -270,11 +279,31 @@ void FaceRecSidecar::feedFrame(const QImage &img)
         const QImage src = (img.width() > 960)
             ? img.scaledToWidth(640, Qt::SmoothTransformation)
             : img;
-        if (!src.save(&buf, "JPEG", /*quality*/ 75)) return;
+        if (!src.save(&buf, "JPEG", /*quality*/ 75)) {
+            if (m_framesSent == 0)
+                Logger::warn("FaceRec",
+                             QString("feedFrame: JPEG encode failed (img %1x%2 fmt=%3)")
+                                 .arg(img.width()).arg(img.height()).arg(int(img.format())));
+            return;
+        }
     }
 
     const quint32 n  = quint32(jpeg.size());
     const quint32 be = qToBigEndian(n);
-    m_proc->write(reinterpret_cast<const char *>(&be), 4);
-    m_proc->write(jpeg);
+    const qint64 w1 = m_proc->write(reinterpret_cast<const char *>(&be), 4);
+    const qint64 w2 = m_proc->write(jpeg);
+
+    // On Windows, the QProcess write pipe needs an explicit flush to push
+    // bytes to the child immediately — without this the OS can hold our
+    // frame in a buffer until Qt's event loop spins, and the child sees
+    // nothing.
+    m_proc->waitForBytesWritten(50);
+
+    ++m_framesSent;
+    if (m_framesSent == 1 || m_framesSent % 30 == 0) {
+        Logger::info("FaceRec",
+                     QString("feedFrame #%1: img=%2x%3 jpeg=%4 wrote hdr=%5 body=%6")
+                         .arg(m_framesSent).arg(img.width()).arg(img.height())
+                         .arg(jpeg.size()).arg(w1).arg(w2));
+    }
 }

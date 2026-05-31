@@ -94,6 +94,7 @@ private:
     QString            m_stage;           // current liveness stage
     int                m_blinkCount    = 0;
     int                m_blinkRequired = 2;
+    quint64            m_framesSent    = 0;   // diagnostic — frames pushed to Python
 };
 
 #endif // FACE_REC_SIDECAR_H

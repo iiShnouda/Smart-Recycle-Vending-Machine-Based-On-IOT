@@ -57,6 +57,11 @@ Rectangle {
         camera: Camera { id: cam; active: false }
         videoOutput: videoOut
     }
+    property int _frameTicks: 0
+    property int _frameSkips_noSink: 0
+    property int _frameSkips_invalid: 0
+    property int _frameSkips_nullImg: 0
+
     Timer {
         // ~10 fps is more than enough for MediaPipe + ArcFace; trying
         // to push 30 fps just floods the pipe with redundant frames.
@@ -64,13 +69,32 @@ Rectangle {
         running: cam.active && status === 0 && FaceRec.running
         repeat: true
         onTriggered: {
-            // videoSink + videoFrame come up a few hundred ms AFTER the
-            // camera is told to activate, so guard everything here.
-            if (!videoOut.videoSink) return
+            page._frameTicks++
+            if (!videoOut.videoSink) {
+                page._frameSkips_noSink++
+                if (page._frameTicks % 20 === 0)
+                    console.log("[FaceDetect] tick", page._frameTicks,
+                                "no videoSink (skips:", page._frameSkips_noSink, ")")
+                return
+            }
             const frame = videoOut.videoSink.videoFrame
-            if (!frame || !frame.isValid) return
+            if (!frame || !frame.isValid) {
+                page._frameSkips_invalid++
+                if (page._frameTicks % 20 === 0)
+                    console.log("[FaceDetect] tick", page._frameTicks,
+                                "frame invalid (skips:", page._frameSkips_invalid, ")")
+                return
+            }
             const img = frame.toImage()
-            if (img && !img.isNull) FaceRec.feedFrame(img)
+            if (!img || img.isNull) {
+                page._frameSkips_nullImg++
+                if (page._frameTicks % 20 === 0)
+                    console.log("[FaceDetect] tick", page._frameTicks,
+                                "toImage null (skips:", page._frameSkips_nullImg,
+                                ") frame.size=", frame.size)
+                return
+            }
+            FaceRec.feedFrame(img)
         }
     }
 
