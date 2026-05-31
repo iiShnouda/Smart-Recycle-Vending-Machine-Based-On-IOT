@@ -30,8 +30,15 @@ QString FaceRecSidecar::resolvePython() const
     const QString v = s.value("faceRec/pythonExe").toString();
     if (!v.isEmpty()) return v;
 #ifdef Q_OS_WIN
+    // Fresh local venv (created with the user's Python 3.11; the original
+    // fr_env was built on a different machine and its launcher hardcoded
+    // a Python path that doesn't exist here, so the kiosk could never
+    // start it). To rebuild from scratch:
+    //   cd FaceRec_project
+    //   python -m venv .venv
+    //   .venv\Scripts\pip install "mediapipe==0.10.14" opencv-python onnxruntime numpy
     return QStringLiteral(
-        "C:/Users/Shnou/Downloads/FaceRec_project/fr_env/Scripts/python.exe");
+        "C:/Users/Shnou/Downloads/FaceRec_project/.venv/Scripts/python.exe");
 #else
     // On the Pi: assume a venv at /opt/face_rec/.venv exists with the
     // FaceRec_project's requirements installed. Falls back to system python3.
