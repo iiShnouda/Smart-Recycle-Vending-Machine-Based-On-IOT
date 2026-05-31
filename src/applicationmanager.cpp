@@ -8,6 +8,7 @@
 #include "../include/diagnostics_runner.h"
 #include "../include/yolo_runner.h"
 #include "../include/face_service.h"
+#include "../include/face_rec_sidecar.h"
 #include "../include/analytics.h"
 #include "../include/logs_viewer.h"
 #include "../include/mqtt_client.h"
@@ -66,6 +67,7 @@ void ApplicationManager::initialize()
     new IdleManager(this);
     new AdminAuth(this);
     new FaceService(this);
+    new FaceRecSidecar(this);
     new ProductsModel(this);
     new ProductCatalog(this);
     new OpenFoodFactsClient(this);

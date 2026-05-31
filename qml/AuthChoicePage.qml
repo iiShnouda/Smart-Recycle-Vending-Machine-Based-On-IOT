@@ -19,6 +19,35 @@ Rectangle {
     function bumpIdle() { Idle.touch() }
     Component.onCompleted: Idle.touch()
     StackView.onActivated: Idle.touch()
+
+    // ── Python face-rec sidecar wiring ────────────────────────────────────
+    // Tapping "Face Detection" launches the FaceRec_project's Python
+    // pipeline (MediaPipe liveness + ArcFace match) in its own process.
+    // Python opens its cv2 window for the camera + liveness prompts; this
+    // overlay keeps the kiosk UI in a "busy" state until the result arrives.
+    property string faceStatus: ""
+    property string lastFaceError: ""
+
+    Connections {
+        target: FaceRec
+        function onStatusChanged() {
+            if (FaceRec.status.length > 0) page.faceStatus = FaceRec.status
+        }
+        function onIdentified(name, score) {
+            bumpIdle()
+            page.faceStatus = ""
+            if (!stackView) stackView = StackView.view
+            stackView.push(Qt.resolvedUrl("MainPage.qml"), { userName: name })
+        }
+        function onUnknown(bestScore) {
+            page.faceStatus = ""
+            page.lastFaceError = qsTr("Face not recognised — please register first")
+        }
+        function onFailed(reason) {
+            page.faceStatus = ""
+            page.lastFaceError = reason
+        }
+    }
     TapHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
         onTapped: Idle.touch()
@@ -78,8 +107,9 @@ Rectangle {
 
             onTapped: {
                 bumpIdle()
-                if (!stackView) stackView = StackView.view
-                stackView.push(Qt.resolvedUrl("FaceDetectionPage.qml"))
+                page.lastFaceError = ""
+                page.faceStatus = qsTr("Starting face recognition…")
+                FaceRec.identify()
             }
         }
 
@@ -232,6 +262,88 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    // ===== Face Rec busy overlay =====
+    Rectangle {
+        anchors.fill: parent
+        visible: FaceRec.running || page.faceStatus.length > 0
+        color: "#CC000000"
+        z: 9998
+        TapHandler { acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen }   // swallow taps
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 24
+            BusyIndicator {
+                running: parent.visible
+                width: 96; height: 96
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: page.faceStatus
+                color: "#FFFFFF"
+                font.pixelSize: 30
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                width: page.width * 0.8
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                visible: !FaceRec.running     // only useful once Python's window is up
+                text: { langTick; return qsTr("The camera window will open in a moment. Blink twice, then turn right, then left.") }
+                color: "#A5F3FC"
+                font.pixelSize: 20
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                width: page.width * 0.8
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+        }
+    }
+
+    // ===== Face Rec error/info toast =====
+    Rectangle {
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottomMargin: 60
+        visible: page.lastFaceError.length > 0
+        z: 9999
+        width: errorRow.implicitWidth + 60
+        height: 80
+        radius: 40
+        color: "#1A1D1A"
+        border.width: 2
+        border.color: "#F59E0B"
+
+        Row {
+            id: errorRow
+            anchors.centerIn: parent
+            spacing: 14
+            Text {
+                text: "⚠"
+                color: "#F59E0B"
+                font.pixelSize: 32
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                text: page.lastFaceError
+                color: "#FFFFFF"
+                font.pixelSize: 22
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+        TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+            onTapped: page.lastFaceError = ""
+        }
+        // Auto-dismiss after 6 s.
+        Timer {
+            running: page.lastFaceError.length > 0
+            interval: 6000
+            onTriggered: page.lastFaceError = ""
         }
     }
 

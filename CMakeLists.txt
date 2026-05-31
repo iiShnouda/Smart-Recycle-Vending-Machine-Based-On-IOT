@@ -95,6 +95,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         include/diagnostics_runner.h    src/diagnostics_runner.cpp
         include/yolo_runner.h           src/yolo_runner.cpp
         include/face_service.h          src/face_service.cpp
+        include/face_rec_sidecar.h      src/face_rec_sidecar.cpp
         include/analytics.h             src/analytics.cpp
         include/logs_viewer.h           src/logs_viewer.cpp
         include/mqtt_client.h           src/mqtt_client.cpp
