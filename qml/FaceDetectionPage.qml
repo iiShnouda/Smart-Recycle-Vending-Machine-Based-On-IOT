@@ -35,17 +35,21 @@ Rectangle {
     }
 
     // ── Lifecycle ────────────────────────────────────────────────
+    // The kiosk owns the camera (QtMultimedia → VideoOutput below). Each
+    // frame is JPEG-encoded and piped over stdin to the Python sidecar,
+    // which runs MediaPipe liveness + ArcFace and streams JSON events
+    // back. The kiosk never opens a separate cv2 window.
     Component.onCompleted: {
         Idle.touch()
         cam.active = true
-        FaceService.startIdentify()
+        FaceRec.identify()
     }
     Component.onDestruction: {
-        FaceService.cancel()
+        FaceRec.cancel()
         cam.active = false       // power down camera
     }
     StackView.onActivated:   Idle.touch()
-    StackView.onDeactivated: { FaceService.cancel(); cam.active = false }
+    StackView.onDeactivated: { FaceRec.cancel(); cam.active = false }
 
     // ── Camera + frame pump ──────────────────────────────────────
     CaptureSession {
@@ -54,26 +58,32 @@ Rectangle {
         videoOutput: videoOut
     }
     Timer {
-        interval: 120
-        running: cam.active && status === 0
+        // ~10 fps is more than enough for MediaPipe + ArcFace; trying
+        // to push 30 fps just floods the pipe with redundant frames.
+        interval: 100
+        running: cam.active && status === 0 && FaceRec.running
         repeat: true
         onTriggered: {
             const img = videoOut.videoSink.videoFrame.toImage()
-            if (img && !img.isNull) FaceService.feedFrame(img)
+            if (img && !img.isNull) FaceRec.feedFrame(img)
         }
     }
 
-    // ── FaceService events ───────────────────────────────────────
+    // ── FaceRec events ───────────────────────────────────────────
     Connections {
-        target: FaceService
-        function onMatched(userId, name) {
+        target: FaceRec
+        function onIdentified(name, score) {
             status = 1
-            successPause.userId = userId
+            successPause.userId = ""        // sidecar doesn't expose IDs yet
             successPause.userName = name
             successPause.start()
         }
-        function onNoMatch() {
+        function onUnknown(bestScore) {
             status = 2
+            failurePause.start()
+        }
+        function onFailed(reason) {
+            status = 3
             failurePause.start()
         }
     }
@@ -121,13 +131,26 @@ Rectangle {
                font.pixelSize: 60; font.weight: Font.Black
                anchors.horizontalCenter: parent.horizontalCenter }
         Text {
-            text: { langTick;
-                    return status === 0 ? qsTr("Look at the camera")
-                         : status === 1 ? qsTr("Welcome back!")
-                                        : qsTr("Not recognised") }
+            text: {
+                langTick
+                if (status === 1) return qsTr("Welcome back!")
+                if (status === 2) return qsTr("Not recognised")
+                if (status === 3) return qsTr("Error")
+                // status 0 = scanning — drive prompt off the sidecar stage.
+                switch (FaceRec.stage) {
+                case "BLINK":      return qsTr("Blink twice")
+                                          + "  (" + FaceRec.blinkCount + "/" + FaceRec.blinkRequired + ")"
+                case "TURN_RIGHT": return qsTr("Turn your head RIGHT  →")
+                case "TURN_LEFT":  return qsTr("←  Turn your head LEFT")
+                case "RECOGNIZE":  return qsTr("Hold still…")
+                default:           return qsTr("Look at the camera")
+                }
+            }
             color: status === 1 ? "#16A34A"
-                 : status === 2 ? "#DC2626" : "#5A6B52"
-            font.pixelSize: 22
+                 : status === 2 ? "#DC2626"
+                 : status === 3 ? "#DC2626" : "#0891B2"
+            font.pixelSize: 26
+            font.weight: Font.DemiBold
             anchors.horizontalCenter: parent.horizontalCenter
         }
     }
@@ -178,10 +201,16 @@ Rectangle {
     Text {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 100
         anchors.horizontalCenter: parent.horizontalCenter
-        text: { langTick;
-                return status === 0 ? qsTr("Scanning...")
-                     : status === 1 ? qsTr("Logging you in")
-                                    : qsTr("Switching to QR login") }
+        horizontalAlignment: Text.AlignHCenter
+        width: page.width * 0.86
+        wrapMode: Text.WordWrap
+        text: {
+            langTick
+            if (status === 1) return qsTr("Logging you in")
+            if (status === 2) return qsTr("Switching to QR login")
+            if (status === 3) return FaceRec.status   // contains the error reason
+            return FaceRec.status.length > 0 ? FaceRec.status : qsTr("Starting…")
+        }
         color: "#5A6B52"
         font.pixelSize: 18
 

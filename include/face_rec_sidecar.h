@@ -6,6 +6,7 @@
 #include <QString>
 #include <QPointer>
 #include <QProcess>
+#include <QImage>
 
 /*
  * FaceRecSidecar — drives the FaceRec_project's Python pipeline.
@@ -34,23 +35,40 @@ class FaceRecSidecar : public QObject {
 
     Q_PROPERTY(bool    running READ isRunning NOTIFY runningChanged)
     Q_PROPERTY(QString status  READ status    NOTIFY statusChanged)
+    // Liveness stage drives the on-screen prompt in FaceDetectionPage.
+    //   ""           idle / not started
+    //   "BLINK"      blink twice
+    //   "TURN_RIGHT" turn head right
+    //   "TURN_LEFT"  turn head left
+    //   "RECOGNIZE"  hold still, ArcFace match running
+    Q_PROPERTY(QString stage         READ stage         NOTIFY stageChanged)
+    Q_PROPERTY(int     blinkCount    READ blinkCount    NOTIFY stageChanged)
+    Q_PROPERTY(int     blinkRequired READ blinkRequired NOTIFY stageChanged)
 
 public:
     explicit FaceRecSidecar(QObject *parent = nullptr);
     static FaceRecSidecar *create(QQmlEngine *, QJSEngine *) { return s_instance; }
     static FaceRecSidecar *s_instance;
 
-    bool    isRunning() const;
-    QString status()    const { return m_status; }
+    bool    isRunning()     const;
+    QString status()        const { return m_status; }
+    QString stage()         const { return m_stage; }
+    int     blinkCount()    const { return m_blinkCount; }
+    int     blinkRequired() const { return m_blinkRequired; }
 
 public slots:
     Q_INVOKABLE void identify();
     Q_INVOKABLE void enroll(const QString &name);
     Q_INVOKABLE void cancel();
+    /** Pump one BGR/RGB camera frame into the sidecar. The kiosk's
+     *  Camera owns the device; this just JPEG-encodes the frame and
+     *  pipes it to the running Python process. No-op if not running. */
+    Q_INVOKABLE void feedFrame(const QImage &img);
 
 signals:
     void runningChanged();
     void statusChanged();
+    void stageChanged();
     void identified(const QString &name, double score);
     void unknown(double bestScore);
     void enrolled(const QString &name);
@@ -72,6 +90,9 @@ private:
     QString            m_currentMode;     // "identify" | "enroll"
     QString            m_pendingName;
     QString            m_stdoutBuf;
+    QString            m_stage;           // current liveness stage
+    int                m_blinkCount    = 0;
+    int                m_blinkRequired = 2;
 };
 
 #endif // FACE_REC_SIDECAR_H

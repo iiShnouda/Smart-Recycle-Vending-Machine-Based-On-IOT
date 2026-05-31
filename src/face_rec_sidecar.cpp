@@ -2,8 +2,11 @@
 #include "../include/logger.h"
 
 #include <QFileInfo>
-#include <QRegularExpression>
 #include <QSettings>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QBuffer>
+#include <QtEndian>
 
 FaceRecSidecar *FaceRecSidecar::s_instance = nullptr;
 
@@ -113,9 +116,15 @@ void FaceRecSidecar::identify()
         return;
     }
     m_currentMode = QStringLiteral("identify");
-    setStatus(tr("Starting camera + liveness check…"));
-    // -u = unbuffered stdout (so we see progress lines as Python emits them)
-    startSidecar({ "-u", "-m", "scripts.recognize_user" });
+    m_stage.clear();
+    m_blinkCount    = 0;
+    m_blinkRequired = 2;
+    emit stageChanged();
+    setStatus(tr("Look at the camera…"));
+    // -u = unbuffered I/O so JSON events surface immediately and our
+    // length-prefixed frame writes don't get held in Python's buffer.
+    // sidecar_identify.py reads frames from stdin and streams JSON events.
+    startSidecar({ "-u", "-m", "scripts.sidecar_identify" });
 }
 
 void FaceRecSidecar::enroll(const QString &name)
@@ -142,50 +151,69 @@ void FaceRecSidecar::onStdout()
     if (!m_proc) return;
     m_stdoutBuf += QString::fromUtf8(m_proc->readAllStandardOutput());
 
-    // Drain whole lines for live status updates. The buffer keeps any
-    // trailing partial line for the final-result parse in onFinished.
+    // sidecar_identify.py emits one JSON object per line. Drain whole
+    // lines; any trailing fragment stays buffered for the next read.
     int nl = 0;
     while ((nl = m_stdoutBuf.indexOf('\n')) >= 0) {
         const QString line = m_stdoutBuf.left(nl).trimmed();
         m_stdoutBuf.remove(0, nl + 1);
         if (line.isEmpty()) continue;
 
-        Logger::info("FaceRec", line);
-        if (line.contains("Liveness"))         setStatus(tr("Liveness — blink + turn your head"));
-        else if (line.contains("Recognition")) setStatus(tr("Look at the camera…"));
-        else if (line.contains("Enrollment"))  setStatus(tr("Capturing face…"));
+        const QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8());
+        if (!doc.isObject()) {
+            // Non-JSON line — usually a Python warning. Log it and move on.
+            Logger::info("FaceRec", line);
+            continue;
+        }
+        const QJsonObject obj = doc.object();
+        const QString     ev  = obj.value("e").toString();
+
+        if (ev == "stage") {
+            m_stage         = obj.value("stage").toString();
+            m_blinkCount    = obj.value("count").toInt(m_blinkCount);
+            m_blinkRequired = obj.value("required").toInt(m_blinkRequired);
+            emit stageChanged();
+
+            // Human-readable status mirroring the stage for the page footer.
+            if      (m_stage == "BLINK")
+                setStatus(tr("Blink twice  (%1/%2)").arg(m_blinkCount).arg(m_blinkRequired));
+            else if (m_stage == "TURN_RIGHT") setStatus(tr("Turn your head RIGHT"));
+            else if (m_stage == "TURN_LEFT")  setStatus(tr("Turn your head LEFT"));
+            else if (m_stage == "RECOGNIZE")  setStatus(tr("Hold still — recognising…"));
+        }
+        else if (ev == "identified") {
+            emit identified(obj.value("name").toString(),
+                            obj.value("score").toDouble());
+        }
+        else if (ev == "unknown") {
+            emit unknown(obj.value("score").toDouble());
+        }
+        else if (ev == "error") {
+            emit failed(obj.value("msg").toString());
+        }
+        else {
+            Logger::info("FaceRec", line);
+        }
     }
 }
 
 void FaceRecSidecar::onFinished(int exitCode, QProcess::ExitStatus /*status*/)
 {
-    if (m_proc) m_stdoutBuf += QString::fromUtf8(m_proc->readAll());
-    Logger::info("FaceRec", QString("sidecar exit rc=%1").arg(exitCode));
-    setStatus(QString());
-
-    // recognize_user.py prints one of:
-    //   ✅ IDENTIFIED: <name>  score=0.xxx
-    //   ❌ UNKNOWN  best=<name>  score=0.xxx (threshold=0.55)
-    // enroll_user.py exits 0 on success after "Enrollment complete".
-    if (m_currentMode == QStringLiteral("identify")) {
-        QRegularExpression idRe (QStringLiteral("IDENTIFIED:\\s*(\\S+)\\s+score=([0-9.]+)"));
-        QRegularExpression unkRe(QStringLiteral("UNKNOWN\\s+best=\\S+\\s+score=([0-9.]+)"));
-        const auto idM  = idRe.match(m_stdoutBuf);
-        const auto unkM = unkRe.match(m_stdoutBuf);
-        if (idM.hasMatch())
-            emit identified(idM.captured(1), idM.captured(2).toDouble());
-        else if (unkM.hasMatch())
-            emit unknown(unkM.captured(1).toDouble());
-        else if (exitCode != 0)
-            emit failed(tr("Python exited with code %1").arg(exitCode));
-        else
-            emit failed(tr("No recognition result"));
-    } else if (m_currentMode == QStringLiteral("enroll")) {
-        if (exitCode == 0 && m_stdoutBuf.contains("Enrollment", Qt::CaseInsensitive))
-            emit enrolled(m_pendingName);
-        else
-            emit failed(tr("Enrollment failed (rc=%1)").arg(exitCode));
+    // Drain anything still in the pipe.
+    if (m_proc) {
+        m_stdoutBuf += QString::fromUtf8(m_proc->readAll());
+        onStdout();   // re-parse whatever's left
     }
+    Logger::info("FaceRec", QString("sidecar exit rc=%1").arg(exitCode));
+
+    // If the process died without ever emitting identified/unknown/error,
+    // surface a generic failure so the UI doesn't hang on "running".
+    if (exitCode != 0 && m_currentMode == QStringLiteral("identify"))
+        emit failed(tr("Python exited with code %1").arg(exitCode));
+
+    m_stage.clear();
+    emit stageChanged();
+    setStatus(QString());
 
     if (m_proc) {
         m_proc->deleteLater();
@@ -199,4 +227,35 @@ void FaceRecSidecar::onErrorOccurred(QProcess::ProcessError err)
     Logger::warn("FaceRec", QString("QProcess error %1").arg(int(err)));
     if (err == QProcess::FailedToStart)
         emit failed(tr("Could not start the Python interpreter — check faceRec/pythonExe"));
+}
+
+// ── Frame pump ──────────────────────────────────────────────────────────
+//
+// Wire protocol: [uint32 BE byte length] [JPEG bytes]
+//                A length of 0 signals end-of-stream → Python exits cleanly.
+// JPEG quality 75 keeps each frame ~25 KB so we sustain 10-15 fps easily
+// over a stdin pipe without back-pressure stalls.
+
+void FaceRecSidecar::feedFrame(const QImage &img)
+{
+    if (!m_proc || m_proc->state() != QProcess::Running) return;
+    if (img.isNull()) return;
+
+    // Encode the QImage as JPEG into a memory buffer.
+    QByteArray jpeg;
+    {
+        QBuffer buf(&jpeg);
+        buf.open(QIODevice::WriteOnly);
+        // Downscale very large camera frames; ArcFace + MediaPipe don't
+        // need more than ~720p, and smaller frames cut JPEG + IPC cost.
+        const QImage src = (img.width() > 960)
+            ? img.scaledToWidth(640, Qt::SmoothTransformation)
+            : img;
+        if (!src.save(&buf, "JPEG", /*quality*/ 75)) return;
+    }
+
+    const quint32 n  = quint32(jpeg.size());
+    const quint32 be = qToBigEndian(n);
+    m_proc->write(reinterpret_cast<const char *>(&be), 4);
+    m_proc->write(jpeg);
 }
