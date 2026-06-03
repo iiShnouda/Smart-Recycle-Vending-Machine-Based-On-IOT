@@ -117,6 +117,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         resources/assets/rwg-coin.png
         resources/assets/coin3d/coin.mesh
         resources/assets/coin3d/coin.png
+        resources/assets/NotoEmoji-Regular.ttf
         resources/translations/Recycle_Vending_Machine_LCD_en_US.qm
         resources/translations/Recycle_Vending_Machine_LCD_ar_EG.qm
 )

@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QDirIterator>
 #include <QDebug>
+#include <QFontDatabase>
+#include <QFont>
 
 int main(int argc, char *argv[])
 {
@@ -15,6 +17,42 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     QQuickStyle::setStyle("Material");
+
+    // ── Emoji fallback font ────────────────────────────────────────────
+    // The UI uses emoji glyphs (👤 🔒 📷 📚 🔍 ♻ …) as icons. Neither the
+    // default Windows kiosk font nor the Pi's font set has them in Qt's
+    // fallback chain, so they render as empty boxes ("tofu"). Bundle Noto
+    // Emoji (monochrome) and register it; Qt then pulls missing emoji
+    // glyphs from it. We also append it to the default font's family list
+    // so the fallback is explicit (not just best-effort) under the
+    // Material style. Works identically on Windows and the Pi.
+    {
+        // qt_add_qml_module's resource prefix has shifted across Qt 6
+        // minors, so probe both the legacy and new prefixes.
+        const QStringList fontCandidates {
+            QStringLiteral(":/Recycle_Vending_Machine_LCD/resources/assets/NotoEmoji-Regular.ttf"),
+            QStringLiteral(":/qt/qml/Recycle_Vending_Machine_LCD/resources/assets/NotoEmoji-Regular.ttf"),
+        };
+        int id = -1;
+        for (const QString &p : fontCandidates) {
+            if (QFile::exists(p)) { id = QFontDatabase::addApplicationFont(p); break; }
+        }
+        if (id >= 0) {
+            const QStringList fams = QFontDatabase::applicationFontFamilies(id);
+            if (!fams.isEmpty()) {
+                QFont f = app.font();
+                QStringList chain = f.families();
+                if (chain.isEmpty() && !f.family().isEmpty())
+                    chain << f.family();
+                chain << fams.first();        // e.g. "Noto Emoji"
+                f.setFamilies(chain);
+                app.setFont(f);
+                qInfo().noquote() << "[MAIN] Emoji fallback font loaded:" << fams.first();
+            }
+        } else {
+            qWarning() << "[MAIN] Noto Emoji fallback font not found in qrc";
+        }
+    }
 
     // Identity used by QSettings + QStandardPaths.
     QGuiApplication::setOrganizationName("ReWinGo");
