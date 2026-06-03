@@ -53,7 +53,19 @@ rm -f "$DEB"
 
 # Relaunch the kiosk. We use setsid + nohup so the new process detaches
 # from this helper script's session.
-setsid nohup /usr/local/bin/rewingo > /dev/null 2>&1 &
-echo "✔ rewingo relaunched (pid=$!)"
+#
+# CRITICAL: re-export the GUI session environment before relaunching.
+# The kiosk that spawned us inherited DISPLAY / XAUTHORITY / QT_QPA_PLATFORM
+# from the graphical session, but a detached helper does NOT — so without
+# this the relaunched binary can't reach the screen and the kiosk silently
+# fails to reappear after an update. Defaults match Raspberry Pi OS
+# (labwc/Wayland session → XWayland via the xcb platform on DISPLAY :0).
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+export QT_IM_MODULE="${QT_IM_MODULE:-qtvirtualkeyboard}"
+setsid nohup /usr/local/bin/rewingo > /dev/null 2>&1 < /dev/null &
+echo "✔ rewingo relaunched (pid=$!) DISPLAY=$DISPLAY platform=$QT_QPA_PLATFORM"
 
 echo "=== $(date -Iseconds) rewingo-update-helper done ==="
