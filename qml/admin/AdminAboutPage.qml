@@ -298,32 +298,16 @@ Rectangle {
         color: "#FFFFFF"
         border.width: 2; border.color: "#D8E0CF"
 
-        Column {
-            anchors.fill: parent
-            anchors.margins: 18
-            spacing: 8
-
-            Text { text: qsTr("Built with")
-                   color: "#1F2A1B"
-                   font.pixelSize: 16; font.weight: Font.ExtraBold }
-
-            Text { text: "•  Qt 6 (LGPL)"
-                   color: "#5A6B52"; font.pixelSize: 14 }
-            Text { text: "•  OpenCV 4 (Apache 2.0)"
-                   color: "#5A6B52"; font.pixelSize: 14 }
-            Text { text: "•  Open Food Facts (Open Database License)"
-                   color: "#5A6B52"; font.pixelSize: 14 }
-            Text { text: "•  MQTT (HiveMQ / EMQX / Mosquitto)"
-                   color: "#5A6B52"; font.pixelSize: 14 }
-
-            Rectangle { width: parent.width; height: 1; color: "#D8E0CF" }
-
-            Text { text: qsTr("License: PolyForm Noncommercial 1.0.0 — © 2026 ReWinGo Contributors")
-                   color: "#1F2A1B"
-                   font.pixelSize: 13; font.weight: Font.Bold }
-            Text { text: qsTr("github.com/iiShnouda/Smart-Recycle-Vending-Machine-Based-On-IOT")
-                   color: "#0891B2"
-                   font.pixelSize: 13 }
+        // Clean, app-style footer — just a copyright line. (Removed the
+        // "Built with Qt 6 / OpenCV / …" tech-stack list and the repo URL;
+        // those are dev-facing and don't belong in a shipped kiosk About.)
+        Text {
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            text: "© 2026 ReWinGo"
+            color: "#5A6B52"
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
         }
     }
 }
