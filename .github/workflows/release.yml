@@ -22,10 +22,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # QEMU-emulated arm64 builds Qt + OpenCV with -j2; budget 90 minutes
-    # so we don't get killed mid-link if a runner is slow.
-    timeout-minutes: 90
+    # NATIVE arm64 cloud runner (free for public repos). This is a real
+    # arm64 machine — no QEMU emulation, no instruction translation — so
+    # the build runs at full speed (~5-10x faster than the emulated path).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -33,18 +34,14 @@ jobs:
         with:
           fetch-depth: 0    # full history; CMake/CPack reads it for the version
 
-      - name: Register QEMU for arm64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      # The whole build runs inside a Debian Trixie arm64 container so:
+      # The whole build runs inside a Debian Trixie container so:
       #   - apt package names match the Pi exactly (qt6-quick3d-dev etc.)
-      #   - the resulting binary IS arm64, not cross-compiled
-      #   - we don't have to install Qt 6 / OpenCV on the runner host
+      #   - the .deb's versioned deps (libqt6core6 …) match Pi OS Trixie
+      # Because the RUNNER is already arm64, this container runs NATIVELY
+      # (no --platform / QEMU needed) — exact Pi environment, full speed.
       - name: Build the .deb inside arm64 Debian Trixie
         run: |
-          docker run --rm --platform linux/arm64 \
+          docker run --rm \
             -e DEBIAN_FRONTEND=noninteractive \
             -v "$PWD":/src -w /src \
             debian:trixie-slim bash -eux -c '
