@@ -1,0 +1,85 @@
+name: Build arm64 .deb + GitHub Release
+
+# Triggers:
+#   - push a tag like  v0.2.0          → builds the .deb AND creates the release
+#   - "Run workflow" from the Actions tab → builds the .deb for manual download
+#
+# Output:
+#   build/rewingo_<version>_arm64.deb attached to the Release matching the tag.
+#   The kiosk's in-app update button (UpdateChecker) polls
+#   /repos/<owner>/<repo>/releases/latest, sees the new tag, downloads the
+#   .deb, hands it to /usr/local/bin/rewingo-update-helper for dpkg -i.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  # required so softprops/action-gh-release can create the GitHub Release
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # QEMU-emulated arm64 builds Qt + OpenCV with -j2; budget 90 minutes
+    # so we don't get killed mid-link if a runner is slow.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history; CMake/CPack reads it for the version
+
+      - name: Register QEMU for arm64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # The whole build runs inside a Debian Trixie arm64 container so:
+      #   - apt package names match the Pi exactly (qt6-quick3d-dev etc.)
+      #   - the resulting binary IS arm64, not cross-compiled
+      #   - we don't have to install Qt 6 / OpenCV on the runner host
+      - name: Build the .deb inside arm64 Debian Trixie
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -v "$PWD":/src -w /src \
+            debian:trixie-slim bash -eux -c '
+              echo "container arch: $(uname -m)"
+              echo "container os:   $(. /etc/os-release; echo $PRETTY_NAME)"
+
+              apt-get update
+
+              # setup_pi.sh installs build-essential, cmake, ninja, Qt 6,
+              # OpenCV, libmosquitto-dev, qt6-quick3d-dev, l10n tools, etc.
+              # It also tries usermod -aG dialout pi which silently skips
+              # when there is no pi user (container is root).
+              bash packaging/setup_pi.sh
+
+              # JOBS=2 keeps peak RAM under the runner cap; the linker step
+              # for Qt + OpenCV otherwise gets OOM-killed.
+              JOBS=2 bash packaging/build_deb.sh
+
+              ls -lh build/*.deb
+            '
+
+      - name: Show the built .deb
+        run: ls -lh build/*.deb
+
+      - name: Upload .deb as an Actions artifact (for manual download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rewingo-deb-${{ github.ref_name }}
+          path: build/*.deb
+          if-no-files-found: error
+
+      - name: Attach .deb to the GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.deb
+          generate_release_notes: true
+          fail_on_unmatched_files: true
