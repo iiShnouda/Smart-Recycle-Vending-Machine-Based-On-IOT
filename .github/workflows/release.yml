@@ -20,6 +20,13 @@ permissions:
   # required so softprops/action-gh-release can create the GitHub Release
   contents: write
 
+env:
+  # Opt the JS-based actions (checkout, upload-artifact, gh-release) onto
+  # Node 24 now instead of the deprecated Node 20. Purely silences the
+  # "Node.js 20 actions are deprecated" warning — GitHub flips this on
+  # automatically after 2026-06-16 anyway. No effect on the build itself.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     # NATIVE arm64 cloud runner (free for public repos). This is a real
