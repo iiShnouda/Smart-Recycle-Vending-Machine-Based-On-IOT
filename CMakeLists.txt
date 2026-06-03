@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.2.0 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -299,6 +299,7 @@ set(REWINGO_DEB_DEPS
     qml6-module-qtquick-virtualkeyboard
     qml6-module-qtquick3d
     libqt6quick3d6
+    qt6-svg-plugins
     libopencv-dev
     libmosquitto1
     ca-certificates

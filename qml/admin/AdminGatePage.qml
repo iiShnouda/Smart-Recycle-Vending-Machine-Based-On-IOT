@@ -106,7 +106,7 @@ Rectangle {
             radius: width / 2
             color: "transparent"
             border.width: 10
-            border.color: ringColor()
+            border.color: ring.ringColor()
             opacity: 0.35
             scale: AdminAuth.state === AdminAuth.SCANNING ? 1.05 : 1.0
             Behavior on scale {
@@ -127,7 +127,7 @@ Rectangle {
             radius: width / 2
             color: "transparent"
             border.width: 12
-            border.color: ringColor()
+            border.color: ring.ringColor()
         }
 
         // Inner ring (light tint)
@@ -156,7 +156,7 @@ Rectangle {
             font.pixelSize: AdminAuth.state === AdminAuth.ACCEPTED
                           || AdminAuth.state === AdminAuth.REJECTED
                           ? 170 : 140
-            color: ringColor()
+            color: ring.ringColor()
             font.weight: Font.Black
         }
 

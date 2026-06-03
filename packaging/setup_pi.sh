@@ -31,6 +31,7 @@ apt-get install -y \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick-virtualkeyboard \
   qml6-module-qtquick3d \
+  qt6-svg-plugins \
   libopencv-dev \
   libmosquitto-dev mosquitto-clients ca-certificates
 

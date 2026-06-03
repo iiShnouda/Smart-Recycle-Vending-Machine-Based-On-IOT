@@ -86,9 +86,8 @@ command -v gtk-update-icon-cache    >/dev/null 2>&1 && \
 
 echo "rewingo: install complete."
 echo
-echo "  Edit MongoDB creds:  $ETC_DIR/.env"
-echo "  Start the UI:         rewingo"
-echo "  Start the backend:    rewingo-backend"
+echo "  Edit MQTT broker creds:  $ETC_DIR/.env"
+echo "  Start the kiosk:          rewingo"
 echo
 
 exit 0
