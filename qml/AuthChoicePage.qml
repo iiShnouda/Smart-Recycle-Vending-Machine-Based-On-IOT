@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../components"
 
 Rectangle {
     id: page
@@ -124,8 +125,7 @@ Rectangle {
             border.color: "#D8E0CF"
             z: 10
 
-            TapHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+            BounceOnPress {
                 onTapped: {
                     bumpIdle()
                     showQrNote = false
@@ -205,10 +205,7 @@ Rectangle {
                     color: "#1A1D1A"
                     anchors.horizontalCenter: parent.horizontalCenter
 
-                    TapHandler {
-                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-                        onTapped: goToMainFromNote()
-                    }
+                    BounceOnPress { onTapped: goToMainFromNote() }
 
                     Row {
                         anchors.centerIn: parent
@@ -242,10 +239,7 @@ Rectangle {
         property string iconKind: "qr"
         signal tapped()
 
-        TapHandler {
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-            onTapped: tile.tapped()
-        }
+        BounceOnPress { onTapped: tile.tapped() }
 
         // Drop shadow
         Rectangle {

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../components"
 
 Rectangle {
     id: waitingPage
@@ -44,10 +45,7 @@ Rectangle {
         border.color: "#D8E0CF"
         z: 10
 
-        TapHandler {
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-            onTapped: stackView.pop()
-        }
+        BounceOnPress { onTapped: stackView.pop() }
 
         Text {
             anchors.centerIn: parent
@@ -71,8 +69,7 @@ Rectangle {
         border.color: "#D8E0CF"
         z: 10
 
-        TapHandler {
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+        BounceOnPress {
             onTapped: {
                 while (stackView && stackView.depth > 1) stackView.pop()
             }

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.2.6 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.2.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,6 +84,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         components/FaceIdIcon.qml
         components/RwgCoin.qml
         components/Coin3D.qml
+        components/BounceOnPress.qml
     SOURCES
         include/applicationmanager.h    src/applicationmanager.cpp
         include/translationmanager.h    src/translationmanager.cpp
