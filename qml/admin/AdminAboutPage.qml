@@ -42,7 +42,14 @@ Rectangle {
 
     property StackView stackView: StackView.view
 
-    Component.onCompleted: Idle.disable()
+    Component.onCompleted: {
+        Idle.disable()
+        // If a previous (auto) check already found an update, pop the
+        // prompt immediately on entering the page; otherwise kick off a
+        // fresh check so it's current.
+        if (UpdateInfo.updateAvailable) showUpdatePopup = true
+        else UpdateInfo.checkNow()
+    }
     StackView.onActivated: Idle.disable()
 
     // ============ Top bar ============
@@ -308,6 +315,127 @@ Rectangle {
             color: "#5A6B52"
             font.pixelSize: 14
             font.weight: Font.DemiBold
+        }
+    }
+
+    // ============ Update-available popup ============
+    // Auto-pops the moment a check (manual or automatic) finds a newer
+    // version, so the admin gets an explicit "Install now / Later" prompt
+    // instead of having to spot the inline button.
+    property bool   showUpdatePopup: false
+    property string popupStatus:     ""     // "" | "downloading" | "installing"
+    property real   popupProgress:   0.0
+
+    Connections {
+        target: UpdateInfo
+        function onLatestVersionChanged() {
+            if (UpdateInfo.updateAvailable) page.showUpdatePopup = true
+        }
+        function onNewUpdateDetected(v, notes) { page.showUpdatePopup = true }
+        function onDownloadProgress(recv, total) {
+            if (total > 0) { page.popupStatus = "downloading"
+                             page.popupProgress = recv / total }
+        }
+        function onInstallStarted()  { page.popupStatus = "installing"
+                                       page.popupProgress = 1.0 }
+        function onInstallFailed(r)  { page.popupStatus = ""; page.popupProgress = 0 }
+    }
+
+    Rectangle {
+        id: updatePopup
+        anchors.fill: parent
+        visible: page.showUpdatePopup
+        color: "#CC000000"          // dim backdrop
+        z: 100000
+        // Swallow taps on the backdrop so they don't fall through.
+        MouseArea { anchors.fill: parent }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 0.72
+            radius: 28
+            color: "#FFFFFF"
+            border.width: 2
+            border.color: "#FBBF24"
+            height: popupCol.implicitHeight + 56
+
+            Column {
+                id: popupCol
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 28
+                spacing: 16
+
+                Row {
+                    spacing: 14
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Rectangle {
+                        width: 56; height: 56; radius: 28; color: "#FBBF24"
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.centerIn: parent; text: "⤓"
+                               font.pixelSize: 34; font.weight: Font.Black
+                               color: "#FFFFFF" }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Update available")
+                        color: "#1F2A1B"
+                        font.pixelSize: 30; font.weight: Font.ExtraBold
+                    }
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: qsTr("Version ") + UpdateInfo.latestVersion +
+                          qsTr("  (you have ") + UpdateInfo.currentVersion + ")"
+                    color: "#5A6B52"
+                    font.pixelSize: 18; font.weight: Font.DemiBold
+                }
+
+                // Progress text while installing.
+                Text {
+                    visible: page.popupStatus !== ""
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: page.popupStatus === "downloading"
+                          ? qsTr("Downloading… %1%").arg(Math.round(page.popupProgress*100))
+                          : qsTr("Installing — the app will restart…")
+                    color: "#0891B2"
+                    font.pixelSize: 18; font.weight: Font.Bold
+                }
+
+                // Buttons (hidden once install starts).
+                Row {
+                    visible: page.popupStatus === ""
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 18
+
+                    Rectangle {
+                        width: 200; height: 72; radius: 36; color: "#16A34A"
+                        Text { anchors.centerIn: parent
+                               text: qsTr("Install now")
+                               color: "#FFFFFF"; font.pixelSize: 22
+                               font.weight: Font.ExtraBold }
+                        TapHandler { onTapped: UpdateInfo.downloadAndInstall() }
+                    }
+                    Rectangle {
+                        width: 160; height: 72; radius: 36
+                        color: "#FFFFFF"; border.width: 2; border.color: "#D8E0CF"
+                        Text { anchors.centerIn: parent
+                               text: qsTr("Later")
+                               color: "#1F2A1B"; font.pixelSize: 22
+                               font.weight: Font.ExtraBold }
+                        TapHandler { onTapped: page.showUpdatePopup = false }
+                    }
+                }
+
+                BusyIndicator {
+                    visible: page.popupStatus !== ""
+                    running: page.popupStatus !== ""
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 44; height: 44
+                }
+            }
         }
     }
 }
