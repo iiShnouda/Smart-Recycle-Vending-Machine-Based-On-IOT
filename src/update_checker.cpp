@@ -32,10 +32,12 @@ UpdateChecker::UpdateChecker(QObject *parent) : QObject(parent)
     m_net = new QNetworkAccessManager(this);
     m_currentVersion = QStringLiteral(REWINGO_VERSION);
 
-    // 6-hour periodic check. Tied to single-shot semantics in start()
-    // so the first fire happens after the boot delay, not immediately.
+    // Periodic check every 30 minutes (was 6 h — felt "not automatic").
+    // The first fire still happens after the boot delay in start(), then
+    // every 30 min, so a freshly-published release is picked up within
+    // half an hour without anyone tapping "Check for updates".
     m_timer.setSingleShot(false);
-    m_timer.setInterval(6 * 60 * 60 * 1000);
+    m_timer.setInterval(30 * 60 * 1000);
     connect(&m_timer, &QTimer::timeout, this, &UpdateChecker::checkNow);
 }
 
@@ -184,7 +186,29 @@ void UpdateChecker::setBusy(bool busy)
 
 void UpdateChecker::downloadAndInstall()
 {
-    if (m_assetDownloadUrl.isEmpty()) {
+    // Always log the entry so a tap that reaches C++ is visible in the log,
+    // even if we bail below. (Empty helper log + no /tmp .deb was the symptom
+    // of bailing here silently.)
+    Logger::audit("Updater",
+                  QString("downloadAndInstall tapped: asset='%1' repo='%2' latest='%3'")
+                      .arg(m_assetDownloadUrl, m_repo, m_latestVersion));
+
+    QString url = m_assetDownloadUrl;
+
+    // Fallback: if the GitHub API response didn't yield an asset URL (race,
+    // empty parse, or the user tapped before a check completed), construct
+    // the canonical Release asset URL from the repo + version. The CI names
+    // every asset rewingo_<version>_arm64.deb, so this is deterministic.
+    if (url.isEmpty() && !m_repo.isEmpty() && !m_latestVersion.isEmpty()) {
+        url = QString("https://github.com/%1/releases/download/v%2/"
+                      "rewingo_%2_arm64.deb")
+                  .arg(m_repo, m_latestVersion);
+        Logger::warn("Updater",
+                     QString("asset URL was empty — using fallback %1").arg(url));
+    }
+
+    if (url.isEmpty()) {
+        Logger::warn("Updater", "downloadAndInstall: no URL and no repo/version");
         emit installFailed(tr("No .deb asset found in the latest release."));
         return;
     }
@@ -196,10 +220,9 @@ void UpdateChecker::downloadAndInstall()
         tmpDir + "/rewingo_" + m_latestVersion + "_arm64.deb";
 
     Logger::audit("Updater",
-                  QString("Downloading %1 → %2")
-                      .arg(m_assetDownloadUrl, localPath));
+                  QString("Downloading %1 → %2").arg(url, localPath));
 
-    QNetworkRequest req((QUrl(m_assetDownloadUrl)));
+    QNetworkRequest req((QUrl(url)));
     req.setHeader(QNetworkRequest::UserAgentHeader, "ReWinGo-Kiosk/1.0");
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);

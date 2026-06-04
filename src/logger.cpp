@@ -53,8 +53,10 @@ QString Logger::formatLine(Level lvl, const QString &category,
                    case AUDIT: lname = "AUDIT"; break;
                    default: break; }
 
+    // 12-hour clock with AM/PM (e.g. 2026-06-04 06:04:09.909 PM) instead of
+    // the 24-hour ISO format. "hh" = zero-padded 12-hour hour, "AP" = AM/PM.
     QString line = QStringLiteral("%1 [%2] %3: %4")
-        .arg(when.toString(Qt::ISODateWithMs))
+        .arg(when.toString(QStringLiteral("yyyy-MM-dd hh:mm:ss.zzz AP")))
         .arg(lname)
         .arg(category, msg);
 
