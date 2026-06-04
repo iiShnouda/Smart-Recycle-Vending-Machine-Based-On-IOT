@@ -133,8 +133,16 @@ void FaceRecSidecar::identify()
     setStatus(tr("Look at the camera…"));
     // -u = unbuffered I/O so JSON events surface immediately and our
     // length-prefixed frame writes don't get held in Python's buffer.
-    // sidecar_identify.py reads frames from stdin and streams JSON events.
+    //
+    // Module choice is platform-dependent:
+    //   Windows → scripts.sidecar_identify     (mediapipe: detection + liveness)
+    //   Linux   → scripts.sidecar_identify_cv  (OpenCV YuNet detection, ArcFace,
+    //             NO liveness — mediapipe has no arm64 wheel for the Pi)
+#ifdef Q_OS_WIN
     startSidecar({ "-u", "-m", "scripts.sidecar_identify" });
+#else
+    startSidecar({ "-u", "-m", "scripts.sidecar_identify_cv" });
+#endif
 }
 
 void FaceRecSidecar::enroll(const QString &name)

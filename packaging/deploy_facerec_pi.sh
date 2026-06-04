@@ -44,6 +44,16 @@ rsync -a --delete \
       --exclude '.venv/' --exclude 'fr_env/' --exclude '__pycache__/' \
       "$SRC"/ "$DEST"/
 
+echo "── Fetching the YuNet face detector (OpenCV, ~230 KB) ──"
+# The Pi can't run the mediapipe sidecar (no arm64 wheel), so it uses
+# scripts/sidecar_identify_cv.py which detects faces with OpenCV's YuNet
+# instead. Grab the model if it isn't already bundled.
+YUNET="$DEST/models/face_detection_yunet_2023mar.onnx"
+if [ ! -f "$YUNET" ]; then
+  wget -q "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" \
+       -O "$YUNET" && echo "  YuNet downloaded" || echo "  ⚠ YuNet download failed"
+fi
+
 echo "── Creating venv + installing requirements ──"
 python3 -m venv "$DEST/.venv"
 "$DEST/.venv/bin/pip" install --upgrade pip
