@@ -41,8 +41,8 @@ uint8_t SR165_Read(void)
     HAL_GPIO_WritePin(SR165_LATCH_PORT, SR165_LATCH_PIN, GPIO_PIN_RESET);
     __NOP(); __NOP();
     HAL_GPIO_WritePin(SR165_LATCH_PORT, SR165_LATCH_PIN, GPIO_PIN_SET);
-    /* Clock the 8 captured bits in on SPI3 (MISO only; TX is a dummy). */
-    uint8_t tx = 0xFF;
-    HAL_SPI_TransmitReceive(&SR165_SPI, &tx, &rx, 1, HAL_MAX_DELAY);
+    /* SPI3 is "Receive Only Master" (SCK=PB3, MISO=PB4, no MOSI — that
+     * frees PB5 for the latch). Receive() auto-generates the clock. */
+    HAL_SPI_Receive(&SR165_SPI, &rx, 1, HAL_MAX_DELAY);
     return rx;
 }
