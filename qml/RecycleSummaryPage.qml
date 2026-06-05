@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import Recycle_Vending_Machine_LCD
 
 Rectangle {
     id: summaryPage
@@ -9,6 +10,7 @@ Rectangle {
     property StackView stackView: StackView.view
     property int plasticCount: 0
     property int canCount: 0
+    property int rejectedCount: 0
     property int totalPoints: 0
 
     // Translation refresh helper
@@ -113,7 +115,7 @@ Rectangle {
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                             Text {
-                                text: summaryPage.plasticCount * 10 + " " + qsTr("pts")
+                                text: summaryPage.plasticCount * RecycleSession.bottlePoints + " " + qsTr("pts")
                                 color: "#0891B2"
                                 font.pixelSize: 20
                                 font.weight: Font.DemiBold
@@ -146,7 +148,7 @@ Rectangle {
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                             Text {
-                                text: summaryPage.canCount * 15 + " " + qsTr("pts")
+                                text: summaryPage.canCount * RecycleSession.canPoints + " " + qsTr("pts")
                                 color: "#0891B2"
                                 font.pixelSize: 20
                                 font.weight: Font.DemiBold

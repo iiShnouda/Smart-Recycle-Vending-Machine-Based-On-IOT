@@ -53,6 +53,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/Main.qml
         qml/MainPage.qml
         qml/RecycleWaitingPage.qml
+        qml/RecycleSessionPage.qml
         qml/VendingPage.qml
         qml/QRCodePage.qml
         qml/SleepMode.qml
@@ -106,6 +107,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         include/product_catalog.h       src/product_catalog.cpp
         include/off_client.h            src/off_client.cpp
         include/update_checker.h        src/update_checker.cpp
+        include/recycle_session.h       src/recycle_session.cpp
         include/Serial_Connection.h     src/Serial_Connection.cpp
     RESOURCES
         resources/assets/vending.png

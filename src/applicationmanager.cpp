@@ -1,5 +1,6 @@
 #include "../include/applicationmanager.h"
 #include "../include/Serial_Connection.h"
+#include "../include/recycle_session.h"
 #include "../include/reed_monitor.h"
 #include "../include/database.h"
 #include "../include/logger.h"
@@ -205,6 +206,17 @@ void ApplicationManager::initialize()
             if (m_scanner) m_scanner->rescanNow("admin");
         }
     });
+
+    // ── Recycle session ────────────────────────────────────────────────
+    // The recycle counter (RecycleSession) is driven by the STM32's EVT
+    // lines and sends RECYCLE/VERDICT/BASKETS back out over serial.
+    new RecycleSession(this);
+    if (RecycleSession::s_instance) {
+        connect(this, &ApplicationManager::serialReply,
+                RecycleSession::s_instance, &RecycleSession::onSerialLine);
+        connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
+                this, [this](const QString &cmd){ sendSerial(cmd, 0); });
+    }
 
     // ── YOLO models + face service ─────────────────────────────────────
     {
