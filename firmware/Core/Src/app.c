@@ -29,6 +29,7 @@
 #include "neopixel.h"
 #include "ina219.h"
 #include "recycle.h"
+#include "vend.h"
 
 void  Servo_Init(void);
 void  Servo_SetAngle(uint8_t deg);
@@ -51,6 +52,7 @@ void App_Init(void)
     LoadCell_Init();
     INA219_Init();
     Recycle_Init(App_Send);          /* recycle events stream to the Pi */
+    Vend_Init(App_Send);             /* dispense sequence + EVT,DISPENSED */
     reply("BOOT,SRVM_V2.1\n");
 }
 
@@ -98,10 +100,11 @@ static void handle(char *line)
     if (!strcmp(cmd, "RELAY") && n >= 3) { BSP_Relay((uint8_t)a, b!=0); reply("OK\n"); return; }
     if (!strcmp(cmd, "SERVO") && n >= 2) { Servo_SetAngle((uint8_t)a);  reply("OK\n"); return; }
 
-    if (!strcmp(cmd, "DISPENSE") && n >= 3) {     /* a=motor 0..7, b=steps, c=hz */
-        Stepper_SelectMotor((uint8_t)a);
-        Stepper_Move(DRV_TMC, b, c > 0 ? (uint32_t)c : 2000);
-        reply("OK\n"); return;
+    if (!strcmp(cmd, "DISPENSE") && n >= 2) {      /* a = slot 0..7 */
+        /* Full open-gate -> rotate 1 rev -> close-gate sequence; the Pi
+         * waits for EVT,DISPENSED,<slot> before sending the next item. */
+        reply(Vend_Dispense((uint8_t)a) ? "OK\n" : "ERR,BUSY\n");
+        return;
     }
     if (!strcmp(cmd, "AUGER") && n >= 2) {         /* a=steps, b=hz */
         Stepper_Move(DRV_TP, a, b > 0 ? (uint32_t)b : 1500);
@@ -133,6 +136,7 @@ void App_Task(void)
 
     Sensors_Poll();
     Recycle_Poll();
+    Vend_Poll();
 
     /* Door edge events (reed lives on the STM32). */
     bool closed;
