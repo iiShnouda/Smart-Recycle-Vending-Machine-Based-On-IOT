@@ -22,6 +22,7 @@ typedef enum { DRV_TMC = 0, DRV_TP = 1 } StepperDrv;
 void Stepper_Init(void);
 void Stepper_SelectMotor(uint8_t idx0);                 /* TMC mux, 0..7 */
 void Stepper_Move(StepperDrv d, int32_t steps, uint32_t speed_hz);
+void Stepper_Jog(StepperDrv d, bool forward, uint32_t speed_hz); /* run until Abort */
 bool Stepper_Busy(StepperDrv d);
 void Stepper_Abort(StepperDrv d);
 

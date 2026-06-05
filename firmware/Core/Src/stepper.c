@@ -56,6 +56,18 @@ void Stepper_Move(StepperDrv d, int32_t steps, uint32_t speed_hz)
     HAL_TIM_PWM_Start_IT(a->htim, a->channel);
 }
 
+void Stepper_Jog(StepperDrv d, bool forward, uint32_t speed_hz)
+{
+    Axis *a = &s_axis[d];
+    if (a->busy) Stepper_Abort(d);
+    if (d == DRV_TMC) BSP_TMC_Dir(forward); else BSP_TP_Dir(forward);
+    if (d == DRV_TMC) BSP_TMC_Enable(true); else BSP_TP_Enable(true);
+    a->remaining = -1;                  /* -1 = run forever (belt mode) */
+    a->busy      = true;
+    set_speed(a, speed_hz);
+    HAL_TIM_PWM_Start_IT(a->htim, a->channel);
+}
+
 bool Stepper_Busy(StepperDrv d) { return s_axis[d].busy; }
 
 void Stepper_Abort(StepperDrv d)
@@ -73,6 +85,7 @@ void Stepper_OnPulse(TIM_HandleTypeDef *htim)
     for (int d = 0; d < 2; ++d) {
         Axis *a = &s_axis[d];
         if (!a->busy || htim != a->htim) continue;
+        if (a->remaining < 0) continue;        /* jog: run forever */
         if (a->remaining > 0) a->remaining--;
         if (a->remaining == 0) {
             HAL_TIM_PWM_Stop_IT(a->htim, a->channel);

@@ -43,15 +43,34 @@ App_OnRx(Buf, *Len);
 void App_Send(const char *s){ CDC_Transmit_FS((uint8_t*)s, strlen(s)); }
 ```
 
+## Wire the NeoPixel DMA-complete too
+```c
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
+    Stepper_OnPulse(htim);     /* TIM2 / TIM3 step counting */
+    Neo_OnDmaDone(htim);       /* TIM1 WS2812 DMA done       */
+}
+```
+
 ## Command protocol (USB-CDC, newline-terminated)
-`PING`·`WEIGH`·`IR`·`DOOR`·`RELAY n 0|1`·`SERVO deg`·
-`DISPENSE motor0_7 steps [hz]`·`AUGER steps [hz]`·`STOP`
+**Pi → board:** `PING` · `WEIGH` · `IR` · `DOOR` · `POWER` · `RELAY n 0|1` ·
+`SERVO deg` · `DISPENSE motor0_7 steps [hz]` · `AUGER steps [hz]` · `STOP` ·
+`RECYCLE 0|1` · `BASKETS bottleFull canFull` · `VERDICT BOTTLE|CAN|REJECT`
 
-## Still to add (specialized drivers)
-- **`tmc2209.c`** — USART2 single-wire config (microsteps, current,
-  StealthChop). The board already works in STEP/DIR mode without it;
-  UART is only needed for silent/torque tuning.
-- **`neopixel.c`** — WS2812 on TIM1_CH1 + DMA (PA8 via the 74HCT125).
-- **`ina219.c`** — bus/current read over I2C1 (PB6/PB7), 5 mΩ shunt.
+**board → Pi (events):** `BOOT,...` · `EVT,DOOR,0|1` ·
+`EVT,READY` · `EVT,ENTRY` · `EVT,BELT` · `EVT,CAMERA` ·
+`EVT,ACCEPT,BOTTLE|CAN` · `EVT,DROPPED,BOTTLE|CAN` ·
+`EVT,REJECT,<why>` · `EVT,REJECTED,<why>`
 
-Say the word and I'll write those three to match this board.
+## Recycle lane flow (recycle.c)
+1. Pi: user picks Recycle → `RECYCLE 1` (+ `BASKETS` fullness).
+2. IR1 entry → board lights NeoPixel, runs belt → `EVT,ENTRY`.
+3. IR2 → `EVT,BELT`; IR3 (camera) → belt stops, `EVT,CAMERA`.
+4. Pi classifies, replies `VERDICT BOTTLE|CAN|REJECT`.
+5. Accept → servo tilts to that basket, belt feeds, IR4/IR5 confirms
+   `EVT,DROPPED,...`. Reject (or full basket) → belt reverses to IR1,
+   `EVT,REJECTED,<why>`.
+6. Pi tallies, awards points → `RECYCLE 0` (NeoPixel + camera off).
+
+## Still optional
+- **`tmc2209.c`** — USART2 single-wire config (microsteps/current/
+  StealthChop). The mux + STEP/DIR already work without it.

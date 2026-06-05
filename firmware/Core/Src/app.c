@@ -23,7 +23,12 @@
 #include "main.h"
 #include "bsp.h"
 #include "hx711_bank.h"
+#include "load_cell.h"
 #include "stepper.h"
+#include "sensors.h"
+#include "neopixel.h"
+#include "ina219.h"
+#include "recycle.h"
 
 void  Servo_Init(void);
 void  Servo_SetAngle(uint8_t deg);
@@ -41,16 +46,39 @@ void App_Init(void)
     BSP_Init();
     Stepper_Init();
     Servo_Init();
+    Sensors_Init();
+    Neo_Init();
+    LoadCell_Init();
+    INA219_Init();
+    Recycle_Init(App_Send);          /* recycle events stream to the Pi */
     reply("BOOT,SRVM_V2.1\n");
 }
 
 static void handle(char *line)
 {
-    char cmd[16] = {0};
+    char cmd[16] = {0}, arg[16] = {0};
     int  a = 0, b = 0, c = 0;
     int  n = sscanf(line, "%15s %d %d %d", cmd, &a, &b, &c);
+    sscanf(line, "%*s %15s", arg);          /* string 2nd token (verdicts) */
 
     if (!strcmp(cmd, "PING")) { reply("PONG\n"); return; }
+
+    /* ── Recycle lane (driven by the Pi while in Recycle mode) ───────── */
+    if (!strcmp(cmd, "RECYCLE") && n >= 2) { Recycle_Arm(a != 0); reply("OK\n"); return; }
+    if (!strcmp(cmd, "BASKETS") && n >= 3) { Recycle_SetBaskets(a != 0, b != 0); reply("OK\n"); return; }
+    if (!strcmp(cmd, "VERDICT")) {
+        if      (!strcmp(arg, "BOTTLE")) Recycle_Verdict(V_BOTTLE, REJ_NONE);
+        else if (!strcmp(arg, "CAN"))    Recycle_Verdict(V_CAN,    REJ_NONE);
+        else                             Recycle_Verdict(V_REJECT, REJ_NOT_RECYCLABLE);
+        reply("OK\n"); return;
+    }
+    if (!strcmp(cmd, "POWER")) {           /* INA219 snapshot */
+        char o[64];
+        snprintf(o, sizeof o, "POWER,%ld,%ld,%ld\n",
+                 (long)INA219_BusVoltage_mV(), (long)INA219_Current_mA(),
+                 (long)INA219_Power_mW());
+        reply(o); return;
+    }
 
     if (!strcmp(cmd, "WEIGH")) {
         int32_t w[HX711_COUNT];
@@ -98,8 +126,16 @@ void App_OnRx(const uint8_t *data, uint32_t len)
 
 void App_Task(void)
 {
-    /* Push an unsolicited DOOR event on change (reed lives on the STM32). */
-    static int last = -1;
-    int now = BSP_DoorClosed() ? 1 : 0;
-    if (now != last) { last = now; reply(now ? "EVT,DOOR,1\n" : "EVT,DOOR,0\n"); }
+    /* 5 ms cadence: debounce sensors, then run the recycle state machine. */
+    static uint32_t tick = 0;
+    if (HAL_GetTick() - tick < 5) return;
+    tick = HAL_GetTick();
+
+    Sensors_Poll();
+    Recycle_Poll();
+
+    /* Door edge events (reed lives on the STM32). */
+    bool closed;
+    if (Sensors_DoorChanged(&closed))
+        reply(closed ? "EVT,DOOR,1\n" : "EVT,DOOR,0\n");
 }
