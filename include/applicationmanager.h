@@ -134,6 +134,11 @@ private:
     QThread           *m_serialThread = nullptr;
     Serial_Connection *m_serial       = nullptr;
 
+    // Cabinet LEDs (relays 1+2): on with any activity, off after 5 min idle.
+    class QTimer      *m_ledTimer     = nullptr;
+    bool               m_ledsOn       = false;
+    void               setCabinetLeds(bool on);
+
     // Reed switch monitor (on GUI thread — polling at 20 Hz is cheap).
     ReedMonitor       *m_reed         = nullptr;
 

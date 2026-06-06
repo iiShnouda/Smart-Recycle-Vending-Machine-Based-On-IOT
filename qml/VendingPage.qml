@@ -46,21 +46,30 @@ Rectangle {
     property int    dispensingIndex: -1            // -1 = idle, else cart[idx]
     property string dispensingStatus: ""
     readonly property bool dispensing: dispensingIndex >= 0
+    property var    dispensedItems: []             // what actually dropped
+    property int    pointsUsed: 0
 
     function startDispenseSequence() {
         if (cart.length === 0 || dispensing) return
         checkoutDialog.close()
+        dispensedItems = []
+        pointsUsed = 0
         dispensingIndex = 0
         sendNextDispense()
     }
 
     function sendNextDispense() {
         if (dispensingIndex >= cart.length) {
-            // All items processed — wrap up.
+            // All items processed — show the receipt, then reset.
             dispensingIndex = -1
             dispensingStatus = ""
             clearCart()
             ProductsModel.reload()   // refresh in case any were disabled
+            stackView.push(receiptComponent, {
+                items: vendingPage.dispensedItems,
+                totalUsed: vendingPage.pointsUsed,
+                newBalance: vendingPage.userPoints
+            })
             return
         }
         const item = cart[dispensingIndex]
@@ -78,6 +87,8 @@ Rectangle {
             // Real refund happens on the Pi (audit + DB) — for the UI we
             // only need to mirror the deduction here.
             vendingPage.userPoints -= item.price
+            vendingPage.pointsUsed += item.price
+            vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
             dispensingIndex++
             sendNextDispense()
         }
@@ -98,6 +109,8 @@ Rectangle {
 
     Component.onCompleted: { Idle.touch(); ProductsModel.reload() }
     StackView.onActivated: Idle.touch()
+
+    Component { id: receiptComponent; VendingReceiptPage {} }
 
     // ═══════════ DARK HEADER (matches admin pages) ═══════════
     Rectangle {

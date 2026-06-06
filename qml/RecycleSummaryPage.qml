@@ -42,6 +42,15 @@ Rectangle {
             font.pixelSize: 22
             anchors.horizontalCenter: parent.horizontalCenter
         }
+
+        Text {
+            text: { langTick; return qsTr("Thank you for recycling with ReWinGo 💚") }
+            color: "#0891B2"
+            font.pixelSize: 24
+            font.weight: Font.DemiBold
+            anchors.horizontalCenter: parent.horizontalCenter
+            topPadding: 6
+        }
     }
 
     Column {

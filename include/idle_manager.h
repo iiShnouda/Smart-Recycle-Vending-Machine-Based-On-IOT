@@ -48,6 +48,7 @@ public slots:
 
 signals:
     void timedOut();              // main QML hooks this to pop to sleep
+    void touched();               // any user activity (drives the LED timer)
     void timeoutMsChanged();
     void enabledChanged();
 

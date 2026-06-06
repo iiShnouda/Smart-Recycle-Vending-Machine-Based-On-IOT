@@ -24,6 +24,8 @@ void IdleManager::setTimeoutMs(int ms)
 
 void IdleManager::touch()
 {
+    emit touched();              // fire even in admin (idle disabled) so the
+                                 // LED idle timer still sees activity
     if (!m_enabled) return;
     m_timer.start();
 }

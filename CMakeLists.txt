@@ -55,6 +55,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/RecycleWaitingPage.qml
         qml/RecycleSessionPage.qml
         qml/VendingPage.qml
+        qml/VendingReceiptPage.qml
         qml/QRCodePage.qml
         qml/SleepMode.qml
         qml/RecycleCountingPage.qml

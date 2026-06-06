@@ -14,6 +14,7 @@
 #include "../include/logs_viewer.h"
 #include "../include/mqtt_client.h"
 #include "../include/idle_manager.h"
+#include <QTimer>
 #include "../include/product_image_catalog.h"
 #include "../include/inventory_scanner.h"
 #include "../include/product_catalog.h"
@@ -218,6 +219,23 @@ void ApplicationManager::initialize()
                 this, [this](const QString &cmd){ sendSerial(cmd, 0); });
     }
 
+    // ── Cabinet LEDs (relays 1+2) ───────────────────────────────────────
+    // Lit whenever someone's using the machine; off after 5 minutes with
+    // no touch. Any activity (IdleManager::touched) relights them and
+    // restarts the countdown.
+    m_ledTimer = new QTimer(this);
+    m_ledTimer->setSingleShot(true);
+    m_ledTimer->setInterval(5 * 60 * 1000);          // 5 minutes
+    connect(m_ledTimer, &QTimer::timeout, this, [this]() { setCabinetLeds(false); });
+    if (IdleManager::s_instance) {
+        connect(IdleManager::s_instance, &IdleManager::touched, this, [this]() {
+            if (!m_ledsOn) setCabinetLeds(true);
+            m_ledTimer->start();                     // restart 5-min countdown
+        });
+    }
+    setCabinetLeds(true);                            // on at boot
+    m_ledTimer->start();
+
     // ── YOLO models + face service ─────────────────────────────────────
     {
         const QString dataDir = QStandardPaths::writableLocation(
@@ -387,6 +405,17 @@ void ApplicationManager::sendSerial(const QString &command, int timeoutMs)
     QMetaObject::invokeMethod(m_serial, "sendCommand", Qt::QueuedConnection,
                               Q_ARG(QString, command),
                               Q_ARG(int,     timeoutMs));
+}
+
+void ApplicationManager::setCabinetLeds(bool on)
+{
+    if (m_ledsOn == on) return;
+    m_ledsOn = on;
+    // Relay 1 = vending light, Relay 2 = bottom LED (the STM32 switches
+    // them via the 2N2222 driver). Fire-and-forget; no-op if no STM32.
+    sendSerial(QStringLiteral("RELAY 1 %1").arg(on ? 1 : 0), 0);
+    sendSerial(QStringLiteral("RELAY 2 %1").arg(on ? 1 : 0), 0);
+    Logger::info("LED", on ? "Cabinet LEDs on" : "Cabinet LEDs off (idle)");
 }
 
 void ApplicationManager::devTriggerAdmin()
