@@ -67,8 +67,25 @@ bool UpdateChecker::updateAvailable() const
 
 void UpdateChecker::checkNow()
 {
-    if (m_repo.isEmpty() || m_haveInFlight) return;
-    m_haveInFlight = true;
+    if (m_repo.isEmpty()) return;
+
+    // Watchdog: a request whose finished() never fires (e.g. a DNS lookup
+    // that hangs on this Pi's flaky boot-time resolver) must NOT wedge the
+    // checker forever — that bricks the "Check for updates" button until a
+    // reboot. If a request has been in flight for >25 s, abort it and start
+    // fresh instead of early-returning.
+    if (m_haveInFlight) {
+        const qint64 ms = m_inFlightSince.isValid()
+                ? m_inFlightSince.msecsTo(QDateTime::currentDateTime()) : 0;
+        if (ms >= 0 && ms < 25000) return;     // a real request is still running
+        Logger::warn("Updater", "Previous check wedged — resetting",
+                     { {"ms", ms} });
+        if (m_reply) { m_reply->abort(); m_reply->deleteLater(); m_reply = nullptr; }
+        m_haveInFlight = false;
+    }
+
+    m_haveInFlight  = true;
+    m_inFlightSince = QDateTime::currentDateTime();
     setBusy(true);
 
     const QUrl url(QString("https://api.github.com/repos/%1/releases/latest")
@@ -81,16 +98,21 @@ void UpdateChecker::checkNow()
                   "ReWinGo-Kiosk/1.0");
     req.setRawHeader("Accept", "application/vnd.github+json");
     req.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
+    // Hard timeout: a stalled connection ERRORS out (→ onReplyFinished clears
+    // the in-flight flag and records the failure) instead of hanging silently
+    // and freezing the updater on "Up to date" forever.
+    req.setTransferTimeout(20000);
 
-    QNetworkReply *reply = m_net->get(req);
-    connect(reply, &QNetworkReply::finished,
-            this,  &UpdateChecker::onReplyFinished);
+    m_reply = m_net->get(req);
+    connect(m_reply, &QNetworkReply::finished,
+            this,    &UpdateChecker::onReplyFinished);
 }
 
 void UpdateChecker::onReplyFinished()
 {
     auto *reply = qobject_cast<QNetworkReply *>(sender());
     if (!reply) { setBusy(false); m_haveInFlight = false; return; }
+    if (reply == m_reply) m_reply = nullptr;
     reply->deleteLater();
 
     m_lastCheckedAt = QDateTime::currentDateTime();

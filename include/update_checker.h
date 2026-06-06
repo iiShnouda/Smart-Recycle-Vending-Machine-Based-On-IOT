@@ -8,6 +8,7 @@
 #include <QTimer>
 
 class QNetworkAccessManager;
+class QNetworkReply;
 
 /**
  * UpdateChecker — knows whether a newer version of ReWinGo is available
@@ -124,6 +125,8 @@ private:
     QDateTime              m_lastCheckedAt;
     bool                   m_busy        = false;
     bool                   m_haveInFlight = false;
+    QNetworkReply         *m_reply       = nullptr;  // current check request
+    QDateTime              m_inFlightSince;          // watchdog: when it started
 
     void onAssetDownloaded(const QString &localPath);
     void launchHelperAndExit(const QString &localPath);

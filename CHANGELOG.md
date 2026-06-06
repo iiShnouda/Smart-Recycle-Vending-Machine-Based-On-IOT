@@ -5,6 +5,17 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] — 2026-06-06
+
+### Fixed
+- **Self-update no longer wedges the "Check for updates" button.** The update
+  check had no network timeout, so a hung DNS lookup (this Pi stalls on
+  boot-time name resolution) left the in-flight flag stuck `true` forever —
+  every subsequent tap early-returned and the About page froze on "Up to date".
+  Added a 20 s transfer timeout on the request **plus** a 25 s watchdog that
+  aborts and retries a wedged check, so the updater always recovers instead of
+  bricking until reboot.
+
 ## [0.2.8] — 2026-06-06
 
 ### Added
