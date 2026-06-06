@@ -230,9 +230,16 @@ def main() -> int:
         level=getattr(logging, cfg["log_level"].upper(), logging.INFO),
         format="%(asctime)s %(levelname)-7s %(message)s")
 
+    # No Mongo URI yet (e.g. Atlas not set up) — idle quietly instead of
+    # crash-looping, so the unit stays "active" and springs to life the moment
+    # the operator adds MONGODB_URI and restarts. SIGTERM still stops us.
     if not cfg["mongo_uri"]:
-        LOG.error("MONGODB_URI is not set — add it to /etc/rewingo/.env. Refusing to start.")
-        return 2
+        LOG.warning("MONGODB_URI not set in /etc/rewingo/.env — bridge idle, "
+                    "waiting for it. Add the URI then: systemctl restart rewingo-bridge")
+        while not cfg["mongo_uri"]:
+            time.sleep(30)
+            cfg = load_config()
+        LOG.info("MONGODB_URI now present — continuing startup")
 
     LOG.info("rewingo-bridge starting — broker %s:%d, db '%s'",
              cfg["mqtt_host"], cfg["mqtt_port"], cfg["mongo_db"])
