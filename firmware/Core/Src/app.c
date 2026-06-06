@@ -27,7 +27,6 @@
 #include "stepper.h"
 #include "sensors.h"
 #include "neopixel.h"
-#include "ina219.h"
 #include "recycle.h"
 #include "vend.h"
 
@@ -50,7 +49,6 @@ void App_Init(void)
     Sensors_Init();
     Neo_Init();
     LoadCell_Init();
-    INA219_Init();
     Recycle_Init(App_Send);          /* recycle events stream to the Pi */
     Vend_Init(App_Send);             /* dispense sequence + EVT,DISPENSED */
     reply("BOOT,SRVM_V2.1\n");
@@ -74,14 +72,6 @@ static void handle(char *line)
         else                             Recycle_Verdict(V_REJECT, REJ_NOT_RECYCLABLE);
         reply("OK\n"); return;
     }
-    if (!strcmp(cmd, "POWER")) {           /* INA219 snapshot */
-        char o[64];
-        snprintf(o, sizeof o, "POWER,%ld,%ld,%ld\n",
-                 (long)INA219_BusVoltage_mV(), (long)INA219_Current_mA(),
-                 (long)INA219_Power_mW());
-        reply(o); return;
-    }
-
     if (!strcmp(cmd, "WEIGH")) {
         int32_t w[HX711_COUNT];
         char out[96];

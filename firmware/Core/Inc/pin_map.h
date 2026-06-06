@@ -2,9 +2,14 @@
  * pin_map.h — SRVM Controller Board V2.1  (STM32F411CEU6, Black Pill)
  *
  * Single source of truth for every MCU pin, derived from the V2.1
- * netlist (Netlist_SRVM_controller_Schematic_2026-06-04). Use these
+ * netlist (Netlist_SRVM_controller_Schematic_2026-06-06). Use these
  * macros everywhere instead of bare GPIOx / GPIO_PIN_n so a future
  * board revision is a one-file change.
+ *
+ * 2026-06-06: INA219 removed from the design. Its I2C lines no longer
+ * route to the MCU, so I2C1 (PB6/PB7) is now free and there is no
+ * current/power telemetry. The ina219 driver + the POWER command are
+ * gone; you may disable I2C1 in CubeMX.
  *
  * NOTE on CubeMX (.ioc): make sure the generated MX_GPIO_Init /
  * peripheral init matches the modes below. Two pins to fix vs the
@@ -56,10 +61,6 @@
 #define HX711_COUNT      8
 /* Bit position of each HX711 DOUT inside the 165 byte (U9 inputs):
  * U1..U8 DOUT -> U9.11,12,13,14,3,4,5,6  =>  D0..D7 order below.        */
-
-/* ─── INA219 power monitor (I2C1, PB6/PB7) ───────────────────────────── */
-#define INA219_I2C       hi2c1
-#define INA219_ADDR      (0x40 << 1)     /* 7-bit 0x40, HAL wants <<1      */
 
 /* ─── Servo (door / flap) — PB8 TIM4_CH3 PWM ─────────────────────────── */
 #define SERVO_TIM        htim4

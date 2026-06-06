@@ -13,7 +13,8 @@ STM32F411CEU6). Drop these into your CubeIDE project's `Core/Inc` and
   stepper speed math assumes this.
 - **TIM4** (servo): 1 MHz tick, ARR = 19999 (20 ms / 50 Hz frame).
 - Enable **SPI2** (master, 8-bit, the 595) and **SPI3** (master, RX, the 165),
-  **I2C1** (INA219), **USART2** (TMC), **USB_DEVICE / CDC** (link to the Pi).
+  **USART2** (TMC), **USB_DEVICE / CDC** (link to the Pi). *(INA219 removed in
+  the 2026-06-06 board rev — **I2C1 is no longer used** and can be disabled.)*
 
 ## What's implemented (covers every pin)
 | File | Pins / peripheral |
@@ -52,7 +53,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
 ```
 
 ## Command protocol (USB-CDC, newline-terminated)
-**Pi → board:** `PING` · `WEIGH` · `IR` · `DOOR` · `POWER` · `RELAY n 0|1` ·
+**Pi → board:** `PING` · `WEIGH` · `IR` · `DOOR` · `RELAY n 0|1` ·
 `SERVO deg` · `DISPENSE motor0_7 steps [hz]` · `AUGER steps [hz]` · `STOP` ·
 `RECYCLE 0|1` · `BASKETS bottleFull canFull` · `VERDICT BOTTLE|CAN|REJECT`
 

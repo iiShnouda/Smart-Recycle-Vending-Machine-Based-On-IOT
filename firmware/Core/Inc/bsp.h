@@ -2,7 +2,7 @@
  * bsp.h — board support for the simple GPIO peripherals on V2.1:
  * relays, IR slot sensors, reed switch, and the two stepper drivers'
  * enable/direction lines. (The complex peripherals live in their own
- * modules: shiftreg, hx711_bank, tmc2209, neopixel, ina219.)
+ * modules: shiftreg, hx711_bank, tmc2209, neopixel.)
  */
 #ifndef BSP_H
 #define BSP_H
