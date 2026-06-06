@@ -138,8 +138,10 @@ void App_Task(void)
     Recycle_Poll();
     Vend_Poll();
 
-    /* Door edge events (reed lives on the STM32). */
+    /* Door edge events (reed on the STM32). Use the legacy DOOR:OPEN/
+     * DOOR:CLOSED strings the Pi already listens for: door open (magnet
+     * away) -> enter admin; door closed -> inventory rescan. */
     bool closed;
     if (Sensors_DoorChanged(&closed))
-        reply(closed ? "EVT,DOOR,1\n" : "EVT,DOOR,0\n");
+        reply(closed ? "DOOR:CLOSED\n" : "DOOR:OPEN\n");
 }
