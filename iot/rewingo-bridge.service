@@ -1,0 +1,18 @@
+[Unit]
+Description=ReWinGo MQTT -> MongoDB bridge
+# Start after the network is up and (if present) the local broker.
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rewingo
+# Reads /etc/rewingo/.env itself; set REWINGO_ENV to point elsewhere.
+ExecStart=/opt/rewingo-bridge/venv/bin/python /opt/rewingo-bridge/bridge.py
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

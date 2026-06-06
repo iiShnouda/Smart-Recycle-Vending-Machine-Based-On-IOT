@@ -5,6 +5,24 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`iot/` — MQTT → MongoDB bridge (`rewingo-bridge`).** Completes the IoT
+  pipe: the kiosk already publishes every DB write to Mosquitto; this Python
+  service subscribes (`rewingo/#`) and persists each message to MongoDB Atlas.
+  Topic-to-collection routing for `transactions`, `dispense_faults`,
+  `inventory`, `products` (upsert), `product_catalog` (upsert), and kiosk
+  presence (`status`/`heartbeat` → `kiosks`). Ships with a systemd unit and a
+  one-shot `install.sh`. Reads the shared `/etc/rewingo/.env` (new keys:
+  `MONGODB_URI`, `MONGODB_DB`).
+
+### Changed / Removed
+- **Firmware: INA219 removed** to match the 2026-06-06 controller board rev.
+  Its I²C lines no longer route to the MCU, so the `ina219` driver and the
+  `POWER` command are gone and `I2C1` (PB6/PB7) is free. Every other MCU pin is
+  unchanged from the previous revision.
+
 ## [0.2.0] — 2026-05-27
 
 ### Added

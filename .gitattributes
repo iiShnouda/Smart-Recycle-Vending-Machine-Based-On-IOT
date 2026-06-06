@@ -1,0 +1,8 @@
+# Keep Linux-bound scripts and unit/config files as LF so they run on the Pi
+# no matter what a contributor's core.autocrlf setting is. A stray CR in a
+# shebang line ("#!/usr/bin/env bash\r") is a silent "bad interpreter" failure.
+*.sh             text eol=lf
+*.py             text eol=lf
+*.service        text eol=lf
+.env.example     text eol=lf
+**/.env.example  text eol=lf

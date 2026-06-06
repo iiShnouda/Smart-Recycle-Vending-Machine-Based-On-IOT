@@ -1,0 +1,5 @@
+# rewingo-bridge runtime dependencies.
+# Both ship prebuilt arm64 (aarch64) wheels, so `pip install` on the Pi
+# needs no compiler.
+paho-mqtt>=2.0
+pymongo[srv]>=4.6
