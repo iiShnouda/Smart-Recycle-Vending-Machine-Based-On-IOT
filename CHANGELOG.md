@@ -5,9 +5,11 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.8] — 2026-06-06
 
 ### Added
+- **App icon is now the ReWinGo coin** (`rwg-coin.png`, 256×256) instead of the
+  generic vending graphic.
 - **`iot/` — MQTT → MongoDB bridge (`rewingo-bridge`).** Completes the IoT
   pipe: the kiosk already publishes every DB write to Mosquitto; this Python
   service subscribes (`rewingo/#`) and persists each message to MongoDB Atlas.
@@ -16,6 +18,13 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   presence (`status`/`heartbeat` → `kiosks`). Ships with a systemd unit and a
   one-shot `install.sh`. Reads the shared `/etc/rewingo/.env` (new keys:
   `MONGODB_URI`, `MONGODB_DB`).
+
+### Fixed
+- **In-app self-update now completes the install.** On 0.2.6 the
+  `downloadAndInstall` path could return silently when the release asset URL
+  hadn't been captured, so `rewingo-update-helper` never ran (its log stayed
+  empty — confirmed on the Pi). The fallback asset URL + entry logging make the
+  **Download & install** button reliably hand the `.deb` to `dpkg -i` and relaunch.
 
 ### Changed / Removed
 - **Firmware: INA219 removed** to match the 2026-06-06 controller board rev.

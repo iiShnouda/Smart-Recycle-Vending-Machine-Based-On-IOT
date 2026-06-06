@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.2.7 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.2.8 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -232,7 +232,7 @@ install(FILES   packaging/sudoers.d/rewingo
 #  disk for reference but not installed.)
 install(FILES   packaging/rewingo.desktop
     DESTINATION usr/share/applications)
-install(FILES   resources/assets/vending.png
+install(FILES   resources/assets/rwg-coin.png
     DESTINATION usr/share/icons/hicolor/256x256/apps
     RENAME      rewingo.png)
 
