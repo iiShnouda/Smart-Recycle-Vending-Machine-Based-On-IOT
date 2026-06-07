@@ -139,6 +139,25 @@ Rectangle {
         }
     }
 
+    // Safety net: the sidecar can block on its stdin read if the camera frames
+    // stall, so identify/unknown may never fire. Rather than get stuck on the
+    // scan screen forever, after this long with no result we treat it as a new
+    // user and go to the consent/registration flow.
+    Timer {
+        id: scanTimeout
+        interval: 12000
+        running: status === 0       // counts only while still scanning
+        repeat: false
+        onTriggered: {
+            if (status !== 0) return
+            status = 2
+            FaceRec.cancel()
+            cam.active = false
+            stackView.replace(
+                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
+        }
+    }
+
     // ── Back button ──────────────────────────────────────────────
     Rectangle {
         anchors.top: parent.top; anchors.left: parent.left
