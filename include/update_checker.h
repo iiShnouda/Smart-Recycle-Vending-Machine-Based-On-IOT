@@ -9,6 +9,7 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
+class QProcess;
 
 /**
  * UpdateChecker — knows whether a newer version of ReWinGo is available
@@ -107,11 +108,9 @@ signals:
     void installFinished(const QString &message);
     void installFailed(const QString &reason);
 
-private slots:
-    void onReplyFinished();
-
 private:
     void setBusy(bool busy);
+    void applyReleaseJson(const QByteArray &body);
     int  compareSemver(const QString &a, const QString &b) const;
 
     QNetworkAccessManager *m_net = nullptr;
@@ -125,7 +124,8 @@ private:
     QDateTime              m_lastCheckedAt;
     bool                   m_busy        = false;
     bool                   m_haveInFlight = false;
-    QNetworkReply         *m_reply       = nullptr;  // current check request
+    QNetworkReply         *m_reply       = nullptr;  // (legacy QNAM; unused now)
+    QProcess              *m_checkProc   = nullptr;  // curl check subprocess
     QDateTime              m_inFlightSince;          // watchdog: when it started
 
     void onAssetDownloaded(const QString &localPath);

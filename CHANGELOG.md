@@ -5,6 +5,17 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-06-07
+
+### Fixed
+- **The in-app update button finally works on this network.** Root cause: on
+  some kiosk networks (notably phone hotspots) **Qt's network stack can't
+  resolve `api.github.com`** while the system resolver `curl` uses works fine
+  (which is why `~/update.sh` always worked). So the check found nothing and
+  the install never ran. The updater now **shells out to `curl`** for both the
+  version check and the `.deb` download, so it works wherever the OS network
+  does. Kept the 25 s watchdog + a 20 s curl timeout so it can't wedge.
+
 ## [0.3.0] — 2026-06-07
 
 ### Fixed / Changed

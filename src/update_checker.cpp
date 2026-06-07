@@ -10,6 +10,7 @@
 #include <QSettings>
 #include <QUrl>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QProcess>
 #include <QCoreApplication>
@@ -80,7 +81,7 @@ void UpdateChecker::checkNow()
         if (ms >= 0 && ms < 25000) return;     // a real request is still running
         Logger::warn("Updater", "Previous check wedged — resetting",
                      { {"ms", ms} });
-        if (m_reply) { m_reply->abort(); m_reply->deleteLater(); m_reply = nullptr; }
+        if (m_checkProc) { m_checkProc->kill(); m_checkProc->deleteLater(); m_checkProc = nullptr; }
         m_haveInFlight = false;
     }
 
@@ -88,51 +89,54 @@ void UpdateChecker::checkNow()
     m_inFlightSince = QDateTime::currentDateTime();
     setBusy(true);
 
-    const QUrl url(QString("https://api.github.com/repos/%1/releases/latest")
-                       .arg(m_repo));
-    QNetworkRequest req(url);
-    // GitHub API requires a User-Agent header. The Accept header pins
-    // the v3 API response shape so a future GitHub schema change won't
-    // silently break us.
-    req.setHeader(QNetworkRequest::UserAgentHeader,
-                  "ReWinGo-Kiosk/1.0");
-    req.setRawHeader("Accept", "application/vnd.github+json");
-    req.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
-    // Hard timeout: a stalled connection ERRORS out (→ onReplyFinished clears
-    // the in-flight flag and records the failure) instead of hanging silently
-    // and freezing the updater on "Up to date" forever.
-    req.setTransferTimeout(20000);
+    const QString url = QString("https://api.github.com/repos/%1/releases/latest")
+                            .arg(m_repo);
 
-    m_reply = m_net->get(req);
-    connect(m_reply, &QNetworkReply::finished,
-            this,    &UpdateChecker::onReplyFinished);
+    // Use curl instead of QNetworkAccessManager. On some kiosk networks
+    // (notably phone hotspots) Qt's resolver returns "host not found" while
+    // the system resolver curl uses works fine — curl is robust everywhere
+    // the OS network works. --max-time caps a stall; the watchdog above is a
+    // second safety net.
+    auto *proc = new QProcess(this);
+    m_checkProc = proc;
+    proc->setProgram(QStringLiteral("curl"));
+    proc->setArguments({ QStringLiteral("-fsSL"),
+                         QStringLiteral("--max-time"), QStringLiteral("20"),
+                         QStringLiteral("-A"), QStringLiteral("ReWinGo-Kiosk/1.0"),
+                         QStringLiteral("-H"), QStringLiteral("Accept: application/vnd.github+json"),
+                         QStringLiteral("-H"), QStringLiteral("X-GitHub-Api-Version: 2022-11-28"),
+                         url });
+    connect(proc, &QProcess::finished, this,
+            [this, proc](int code, QProcess::ExitStatus) {
+        const QByteArray body = proc->readAllStandardOutput();
+        if (m_checkProc == proc) m_checkProc = nullptr;
+        proc->deleteLater();
+        m_lastCheckedAt = QDateTime::currentDateTime();
+        emit lastCheckedAtChanged();
+        setBusy(false);
+        m_haveInFlight = false;
+        if (code != 0 || body.isEmpty()) {
+            Logger::warn("Updater", "Check failed (curl)", { {"code", code} });
+            return;
+        }
+        applyReleaseJson(body);
+    });
+    connect(proc, &QProcess::errorOccurred, this,
+            [this, proc](QProcess::ProcessError) {
+        if (m_checkProc == proc) m_checkProc = nullptr;
+        setBusy(false);
+        m_haveInFlight = false;
+        Logger::warn("Updater", "curl failed to start (is curl installed?)");
+    });
+    proc->start();
 }
 
-void UpdateChecker::onReplyFinished()
+void UpdateChecker::applyReleaseJson(const QByteArray &body)
 {
-    auto *reply = qobject_cast<QNetworkReply *>(sender());
-    if (!reply) { setBusy(false); m_haveInFlight = false; return; }
-    if (reply == m_reply) m_reply = nullptr;
-    reply->deleteLater();
-
-    m_lastCheckedAt = QDateTime::currentDateTime();
-    emit lastCheckedAtChanged();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        Logger::warn("Updater", "Check failed",
-                     { {"err",   reply->errorString()},
-                       {"http",  reply->attribute(
-                           QNetworkRequest::HttpStatusCodeAttribute)} });
-        setBusy(false); m_haveInFlight = false;
-        return;
-    }
-
-    const QByteArray body = reply->readAll();
     QJsonParseError perr;
     const QJsonDocument doc = QJsonDocument::fromJson(body, &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
         Logger::warn("Updater", "Bad JSON from GitHub");
-        setBusy(false); m_haveInFlight = false;
         return;
     }
 
@@ -143,10 +147,9 @@ void UpdateChecker::onReplyFinished()
     if (tag.startsWith('v') || tag.startsWith('V')) tag = tag.mid(1);
 
     const QString notes = obj.value("body").toString();
-    const QString url   = obj.value("html_url").toString();
+    const QString rurl  = obj.value("html_url").toString();
 
-    // Look for an arm64 .deb asset in the release. The download URL is
-    // what we'll fetch when the admin presses "Install update".
+    // Look for an arm64 .deb asset in the release.
     QString assetUrl;
     const QJsonArray assets = obj.value("assets").toArray();
     for (const QJsonValue &av : assets) {
@@ -161,16 +164,12 @@ void UpdateChecker::onReplyFinished()
     const bool changed = (tag != m_latestVersion);
     m_latestVersion    = tag;
     m_releaseNotes     = notes;
-    m_releaseUrl       = url;
+    m_releaseUrl       = rurl;
     m_assetDownloadUrl = assetUrl;
-
     if (changed) emit latestVersionChanged();
 
-    setBusy(false); m_haveInFlight = false;
-
-    // If a NEW version (one we haven't told the admin about before)
-    // is available, fire the signal. We remember the last version we
-    // surfaced via QSettings so re-checks don't re-fire the toast.
+    // If a NEW version (one we haven't surfaced before) is available, fire
+    // the toast once; QSettings remembers it so re-checks don't re-fire.
     if (updateAvailable()) {
         QSettings s;
         const QString lastSeen =
@@ -242,35 +241,37 @@ void UpdateChecker::downloadAndInstall()
         tmpDir + "/rewingo_" + m_latestVersion + "_arm64.deb";
 
     Logger::audit("Updater",
-                  QString("Downloading %1 → %2").arg(url, localPath));
+                  QString("Downloading %1 → %2 (curl)").arg(url, localPath));
+    emit installStarted();
 
-    QNetworkRequest req((QUrl(url)));
-    req.setHeader(QNetworkRequest::UserAgentHeader, "ReWinGo-Kiosk/1.0");
-    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                     QNetworkRequest::NoLessSafeRedirectPolicy);
-    QNetworkReply *reply = m_net->get(req);
-
-    connect(reply, &QNetworkReply::downloadProgress,
-            this,  &UpdateChecker::downloadProgress);
-
-    connect(reply, &QNetworkReply::finished, this,
-            [this, reply, localPath]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit installFailed(tr("Download failed: %1")
-                                   .arg(reply->errorString()));
+    // curl follows redirects (-L) and works on networks where Qt's stack
+    // can't resolve the host. -f makes it fail on HTTP errors.
+    auto *dl = new QProcess(this);
+    dl->setProgram(QStringLiteral("curl"));
+    dl->setArguments({ QStringLiteral("-fL"),
+                       QStringLiteral("--max-time"), QStringLiteral("300"),
+                       QStringLiteral("-o"), localPath, url });
+    connect(dl, &QProcess::finished, this,
+            [this, dl, localPath](int code, QProcess::ExitStatus) {
+        dl->deleteLater();
+        if (code != 0) {
+            emit installFailed(tr("Download failed (curl rc=%1)").arg(code));
             return;
         }
-        QFile f(localPath);
-        if (!f.open(QIODevice::WriteOnly)) {
-            emit installFailed(tr("Could not open %1 for writing")
-                                   .arg(localPath));
+        QFileInfo fi(localPath);
+        if (!fi.exists() || fi.size() < 100000) {
+            emit installFailed(tr("Downloaded file looks invalid (%1 bytes)")
+                                   .arg(fi.size()));
             return;
         }
-        f.write(reply->readAll());
-        f.close();
         onAssetDownloaded(localPath);
     });
+    connect(dl, &QProcess::errorOccurred, this,
+            [this, dl](QProcess::ProcessError) {
+        dl->deleteLater();
+        emit installFailed(tr("curl failed to start"));
+    });
+    dl->start();
 }
 
 void UpdateChecker::onAssetDownloaded(const QString &localPath)
