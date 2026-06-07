@@ -7,10 +7,9 @@ import "../components"
  * FaceDetectionPage — user-side face login.
  *
  * The Python sidecar (scripts.sidecar_identify_selfcam) OPENS THE CAMERA
- * ITSELF and streams JSON events back — the kiosk no longer pumps frames
- * over QtMultimedia (that pipeline stalled on the Pi and hung the sidecar).
- * So this page is now just: launch the sidecar, show a scanning animation,
- * and react to identified / unknown / error / timeout.
+ * ITSELF, runs recognition AND writes a live preview frame to
+ * /tmp/rewingo_face.jpg. This page shows that preview (a separate, parallel
+ * process does the detection) and reacts to the sidecar's JSON events:
  *
  *   identified → MainPage
  *   unknown / error / 12s timeout → ConsentPage (registration)
@@ -21,7 +20,8 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    property int  status: 0     // 0 = scanning, 1 = matched, 2 = noMatch, 3 = error
+    property int  status: 0       // 0 = scanning, 1 = matched, 2 = noMatch, 3 = error
+    property int  previewTick: 0  // bumps to reload the live preview frame
 
     property int langTick: 0
     Connections {
@@ -37,6 +37,12 @@ Rectangle {
     Component.onDestruction: FaceRec.cancel()
     StackView.onActivated:   Idle.touch()
     StackView.onDeactivated: FaceRec.cancel()
+
+    // Reload the preview frame the sidecar writes (~8 fps).
+    Timer {
+        interval: 120; running: status === 0; repeat: true
+        onTriggered: page.previewTick++
+    }
 
     // ── FaceRec events ───────────────────────────────────────────
     Connections {
@@ -64,8 +70,6 @@ Rectangle {
         id: failurePause
         interval: 1500; repeat: false
         onTriggered: {
-            // Unknown / error → registration flow:
-            //   ConsentPage → FaceEnrollPage → RegistrationCompletePage → MainPage
             stackView.replace(
                 "qrc:/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
         }
@@ -122,7 +126,7 @@ Rectangle {
         }
     }
 
-    // ── Scanning visual (no live preview — sidecar owns the camera) ──
+    // ── Live camera preview (frames written by the recognition sidecar) ──
     Item {
         id: ring
         anchors.centerIn: parent
@@ -132,38 +136,39 @@ Rectangle {
             anchors.fill: parent
             color: status === 1 ? "#16A34A"
                  : status === 2 ? "#DC2626" : "#0891B2"
-            scanLine: status === 0          // animated scan line while scanning
+            scanLine: status === 0
         }
 
-        // Soft pulsing disc inside the brackets so the user sees it's "alive".
         Rectangle {
-            id: disc
             anchors.centerIn: parent
-            width: parent.width  * 0.62
-            height: parent.height * 0.62
+            width: parent.width  * 0.66
+            height: parent.height * 0.66
             radius: width / 2
-            color: status === 1 ? "#16A34A"
-                 : status === 2 ? "#DC2626"
-                 : status === 3 ? "#DC2626" : "#0891B2"
-            opacity: 0.12
+            color: "#1A1D1A"
+            clip: true
 
-            SequentialAnimation on scale {
-                running: status === 0
-                loops: Animation.Infinite
-                NumberAnimation { to: 1.06; duration: 1100; easing.type: Easing.InOutSine }
-                NumberAnimation { to: 0.94; duration: 1100; easing.type: Easing.InOutSine }
+            // The actual camera image, reloaded each tick. Empty source when
+            // we have a result so the ✓/✗ overlay shows on a clean disc.
+            Image {
+                anchors.fill: parent
+                fillMode: Image.PreserveAspectCrop
+                cache: false
+                asynchronous: true
+                source: status === 0
+                        ? "file:///tmp/rewingo_face.jpg?t=" + previewTick
+                        : ""
             }
-        }
 
-        Text {
-            anchors.centerIn: parent
-            text: status === 1 ? "✓" : status === 0 ? "🙂" : "✗"
-            color: status === 1 ? "#16A34A"
-                 : status === 0 ? "#0891B2" : "#DC2626"
-            font.pixelSize: status === 0 ? 150 : 200
-            font.weight: Font.Black
-            style: Text.Outline
-            styleColor: "#FFFFFF"
+            Text {
+                anchors.centerIn: parent
+                visible: status !== 0
+                text: status === 1 ? "✓" : "✗"
+                color: status === 1 ? "#16A34A" : "#DC2626"
+                font.pixelSize: 200
+                font.weight: Font.Black
+                style: Text.Outline
+                styleColor: "#FFFFFF"
+            }
         }
     }
 

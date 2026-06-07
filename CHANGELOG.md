@@ -5,6 +5,15 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-06-07
+
+### Added
+- **Live camera preview is back on the face-login screen.** The self-capturing
+  recognition sidecar now also writes each frame to `/tmp/rewingo_face.jpg`
+  (atomic rename), and `FaceDetectionPage` shows it live — so you see yourself
+  while the *separate* recognition process runs in parallel. No QtMultimedia,
+  so none of the frame-stall problems. Recognition window bumped to 8 s.
+
 ## [0.3.1] — 2026-06-07
 
 ### Fixed

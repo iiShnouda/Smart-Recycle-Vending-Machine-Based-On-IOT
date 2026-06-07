@@ -24,8 +24,9 @@ from app.db_utils import load_users
 MODEL_PATH = Path("models") / "arcface.onnx"
 YUNET_PATH = Path("models") / "face_detection_yunet_2023mar.onnx"
 THRESHOLD       = 0.55
-RECOGNITION_SEC = float(os.environ.get("FACE_SECONDS", "6"))
+RECOGNITION_SEC = float(os.environ.get("FACE_SECONDS", "8"))
 CAM_INDEX       = int(os.environ.get("FACE_CAM_INDEX", "1"))   # 1 = Logitech
+PREVIEW_PATH    = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
 
 
 def emit(o):
@@ -93,6 +94,15 @@ def main():
         fr = grab(kind, h)
         if fr is None:
             continue
+        # Write a live preview frame for the kiosk UI. Atomic rename so the
+        # QML Image never reads a half-written file.
+        try:
+            _tmp = PREVIEW_PATH + ".tmp"
+            cv2.imwrite(_tmp, cv2.resize(fr, (480, 360)),
+                        [cv2.IMWRITE_JPEG_QUALITY, 70])
+            os.replace(_tmp, PREVIEW_PATH)
+        except Exception:
+            pass
         H, W = fr.shape[:2]
         det.setInputSize((W, H))
         _, faces = det.detect(fr)
