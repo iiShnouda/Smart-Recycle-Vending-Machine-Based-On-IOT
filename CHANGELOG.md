@@ -5,6 +5,23 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-06-07
+
+### Fixed / Changed
+- **Face login now recognises people on the Pi.** The kiosk used to pipe
+  QtMultimedia camera frames to the recogniser over stdin, but that frame
+  delivery stalls on the Pi — the Python sidecar blocked forever on its stdin
+  read, so face login *and* the "not recognised → registration" route never
+  fired (you'd sit on the scan screen). The Pi sidecar now **opens the camera
+  itself** (`scripts.sidecar_identify_selfcam`, Logitech cam) and emits the
+  same JSON events; `FaceDetectionPage` no longer pipes frames and shows a
+  scanning animation instead of a live mirror preview.
+- **Safety-net timeout** on the face screen: if no result arrives in 12 s, it
+  routes to the registration consent flow instead of hanging.
+- Versioned the self-capture sidecar in the repo at
+  `face_rec/scripts/sidecar_identify_selfcam.py` (deploy to
+  `/opt/face_rec/scripts/` on the Pi).
+
 ## [0.2.9] — 2026-06-06
 
 ### Fixed

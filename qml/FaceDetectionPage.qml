@@ -1,24 +1,19 @@
 import QtQuick
 import QtQuick.Controls
-import QtMultimedia
 import Recycle_Vending_Machine_LCD
 import "../components"
 
 /*
  * FaceDetectionPage — user-side face login.
  *
- * On entry:
- *   1. Start the camera + the YOLO-backed FaceService::startIdentify()
- *   2. Pump frames from the VideoOutput into FaceService.feedFrame()
- *   3. On match → fetch user from MongoDB → push MainPage
- *   4. On timeout (~10 s) → fall back to QRCodePage
+ * The Python sidecar (scripts.sidecar_identify_selfcam) OPENS THE CAMERA
+ * ITSELF and streams JSON events back — the kiosk no longer pumps frames
+ * over QtMultimedia (that pipeline stalled on the Pi and hung the sidecar).
+ * So this page is now just: launch the sidecar, show a scanning animation,
+ * and react to identified / unknown / error / timeout.
  *
- * On exit (always — even crash/back/timeout):
- *   - Camera switched OFF                ← saves power & wears the sensor less
- *   - FaceService cancelled              ← stops the YOLO loop
- *
- * Visual: live circular camera preview with the iPhone-style Face ID icon
- * pulsing around it, a sub-line for status, and the standard back/exit.
+ *   identified → MainPage
+ *   unknown / error / 12s timeout → ConsentPage (registration)
  */
 Rectangle {
     id: page
@@ -34,95 +29,33 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────
-    // The kiosk owns the camera (QtMultimedia → VideoOutput below). Each
-    // frame is JPEG-encoded and piped over stdin to the Python sidecar,
-    // which runs MediaPipe liveness + ArcFace and streams JSON events
-    // back. The kiosk never opens a separate cv2 window.
+    // ── Lifecycle: the sidecar owns the camera now ───────────────
     Component.onCompleted: {
         Idle.touch()
-        cam.active = true
         FaceRec.identify()
     }
-    Component.onDestruction: {
-        FaceRec.cancel()
-        cam.active = false       // power down camera
-    }
+    Component.onDestruction: FaceRec.cancel()
     StackView.onActivated:   Idle.touch()
-    StackView.onDeactivated: { FaceRec.cancel(); cam.active = false }
-
-    // ── Camera + frame pump ──────────────────────────────────────
-    CaptureSession {
-        id: cs
-        camera: Camera { id: cam; active: false }
-        videoOutput: videoOut
-    }
-    property int _frameTicks: 0
-    property int _frameSkips_noSink: 0
-    property int _frameSkips_invalid: 0
-    property int _frameSkips_nullImg: 0
-
-    Timer {
-        // ~10 fps is more than enough for MediaPipe + ArcFace; trying
-        // to push 30 fps just floods the pipe with redundant frames.
-        interval: 100
-        running: cam.active && status === 0 && FaceRec.running
-        repeat: true
-        onTriggered: {
-            page._frameTicks++
-            if (!videoOut.videoSink) {
-                page._frameSkips_noSink++
-                if (page._frameTicks % 20 === 0)
-                    console.log("[FaceDetect] tick", page._frameTicks,
-                                "no videoSink (skips:", page._frameSkips_noSink, ")")
-                return
-            }
-            const frame = videoOut.videoSink.videoFrame
-            if (!frame || !frame.isValid) {
-                page._frameSkips_invalid++
-                if (page._frameTicks % 20 === 0)
-                    console.log("[FaceDetect] tick", page._frameTicks,
-                                "frame invalid (skips:", page._frameSkips_invalid, ")")
-                return
-            }
-            const img = frame.toImage()
-            if (!img || img.isNull) {
-                page._frameSkips_nullImg++
-                if (page._frameTicks % 20 === 0)
-                    console.log("[FaceDetect] tick", page._frameTicks,
-                                "toImage null (skips:", page._frameSkips_nullImg,
-                                ") frame.size=", frame.size)
-                return
-            }
-            FaceRec.feedFrame(img)
-        }
-    }
+    StackView.onDeactivated: FaceRec.cancel()
 
     // ── FaceRec events ───────────────────────────────────────────
     Connections {
         target: FaceRec
         function onIdentified(name, score) {
             status = 1
-            successPause.userId = ""        // sidecar doesn't expose IDs yet
             successPause.userName = name
             successPause.start()
         }
-        function onUnknown(bestScore) {
-            status = 2
-            failurePause.start()
-        }
-        function onFailed(reason) {
-            status = 3
-            failurePause.start()
-        }
+        function onUnknown(bestScore) { status = 2; failurePause.start() }
+        function onFailed(reason)     { status = 3; failurePause.start() }
     }
+
     Timer {
         id: successPause
         interval: 900; repeat: false
         property string userId
         property string userName
         onTriggered: {
-            cam.active = false
             stackView.push("qrc:/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
                            { userName: userName, userId: userId })
         }
@@ -131,28 +64,22 @@ Rectangle {
         id: failurePause
         interval: 1500; repeat: false
         onTriggered: {
-            // Unknown face → take the user through registration:
-            //   ConsentPage  → FaceEnrollPage  → RegistrationCompletePage → MainPage
-            cam.active = false
+            // Unknown / error → registration flow:
+            //   ConsentPage → FaceEnrollPage → RegistrationCompletePage → MainPage
             stackView.replace(
                 "qrc:/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
         }
     }
-
-    // Safety net: the sidecar can block on its stdin read if the camera frames
-    // stall, so identify/unknown may never fire. Rather than get stuck on the
-    // scan screen forever, after this long with no result we treat it as a new
-    // user and go to the consent/registration flow.
+    // Safety net: if the sidecar never returns a result, don't get stuck.
     Timer {
         id: scanTimeout
         interval: 12000
-        running: status === 0       // counts only while still scanning
+        running: status === 0
         repeat: false
         onTriggered: {
             if (status !== 0) return
             status = 2
             FaceRec.cancel()
-            cam.active = false
             stackView.replace(
                 "qrc:/Recycle_Vending_Machine_LCD/qml/registration/ConsentPage.qml")
         }
@@ -184,15 +111,7 @@ Rectangle {
                 if (status === 1) return qsTr("Welcome back!")
                 if (status === 2) return qsTr("Not recognised")
                 if (status === 3) return qsTr("Error")
-                // status 0 = scanning — drive prompt off the sidecar stage.
-                switch (FaceRec.stage) {
-                case "BLINK":      return qsTr("Blink twice")
-                                          + "  (" + FaceRec.blinkCount + "/" + FaceRec.blinkRequired + ")"
-                case "TURN_RIGHT": return qsTr("Turn your head RIGHT  →")
-                case "TURN_LEFT":  return qsTr("←  Turn your head LEFT")
-                case "RECOGNIZE":  return qsTr("Hold still…")
-                default:           return qsTr("Look at the camera")
-                }
+                return qsTr("Look at the camera")
             }
             color: status === 1 ? "#16A34A"
                  : status === 2 ? "#DC2626"
@@ -203,46 +122,48 @@ Rectangle {
         }
     }
 
-    // ── Round camera preview wrapped in iPhone-style brackets ────
+    // ── Scanning visual (no live preview — sidecar owns the camera) ──
     Item {
         id: ring
         anchors.centerIn: parent
         width: 760; height: 760
 
-        // The iPhone Face ID brackets only — no scanning line.
         FaceIdIcon {
             anchors.fill: parent
             color: status === 1 ? "#16A34A"
                  : status === 2 ? "#DC2626" : "#0891B2"
-            scanLine: false
+            scanLine: status === 0          // animated scan line while scanning
         }
 
-        // Circular live camera fills most of the brackets so the user
-        // sees a big, clear preview of their own face.
+        // Soft pulsing disc inside the brackets so the user sees it's "alive".
         Rectangle {
+            id: disc
             anchors.centerIn: parent
-            width: parent.width  * 0.80
-            height: parent.height * 0.80
+            width: parent.width  * 0.62
+            height: parent.height * 0.62
             radius: width / 2
-            color: "#1A1D1A"
-            clip: true
-            VideoOutput {
-                id: videoOut
-                anchors.fill: parent
-                fillMode: VideoOutput.PreserveAspectCrop
-            }
+            color: status === 1 ? "#16A34A"
+                 : status === 2 ? "#DC2626"
+                 : status === 3 ? "#DC2626" : "#0891B2"
+            opacity: 0.12
 
-            // Big check / X overlay when done
-            Text {
-                anchors.centerIn: parent
-                visible: status !== 0
-                text: status === 1 ? "✓" : "✗"
-                color: status === 1 ? "#16A34A" : "#DC2626"
-                font.pixelSize: 200
-                font.weight: Font.Black
-                style: Text.Outline
-                styleColor: "#FFFFFF"
+            SequentialAnimation on scale {
+                running: status === 0
+                loops: Animation.Infinite
+                NumberAnimation { to: 1.06; duration: 1100; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 0.94; duration: 1100; easing.type: Easing.InOutSine }
             }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: status === 1 ? "✓" : status === 0 ? "🙂" : "✗"
+            color: status === 1 ? "#16A34A"
+                 : status === 0 ? "#0891B2" : "#DC2626"
+            font.pixelSize: status === 0 ? 150 : 200
+            font.weight: Font.Black
+            style: Text.Outline
+            styleColor: "#FFFFFF"
         }
     }
 
@@ -256,9 +177,9 @@ Rectangle {
         text: {
             langTick
             if (status === 1) return qsTr("Logging you in")
-            if (status === 2) return qsTr("Switching to QR login")
-            if (status === 3) return FaceRec.status   // contains the error reason
-            return FaceRec.status.length > 0 ? FaceRec.status : qsTr("Starting…")
+            if (status === 2) return qsTr("New here? Let's get you registered")
+            if (status === 3) return FaceRec.status
+            return FaceRec.status.length > 0 ? FaceRec.status : qsTr("Scanning…")
         }
         color: "#5A6B52"
         font.pixelSize: 18

@@ -135,13 +135,16 @@ void FaceRecSidecar::identify()
     // length-prefixed frame writes don't get held in Python's buffer.
     //
     // Module choice is platform-dependent:
-    //   Windows → scripts.sidecar_identify     (mediapipe: detection + liveness)
-    //   Linux   → scripts.sidecar_identify_cv  (OpenCV YuNet detection, ArcFace,
-    //             NO liveness — mediapipe has no arm64 wheel for the Pi)
+    //   Windows → scripts.sidecar_identify        (mediapipe: detection + liveness,
+    //             frames fed over stdin from the kiosk's QtMultimedia camera)
+    //   Linux   → scripts.sidecar_identify_selfcam (OpenCV YuNet + ArcFace; the
+    //             sidecar OPENS THE CAMERA ITSELF — QtMultimedia frame delivery
+    //             on the Pi stalls, hanging the old stdin-fed sidecar, so the Pi
+    //             page no longer pipes frames; see FaceDetectionPage.qml)
 #ifdef Q_OS_WIN
     startSidecar({ "-u", "-m", "scripts.sidecar_identify" });
 #else
-    startSidecar({ "-u", "-m", "scripts.sidecar_identify_cv" });
+    startSidecar({ "-u", "-m", "scripts.sidecar_identify_selfcam" });
 #endif
 }
 
