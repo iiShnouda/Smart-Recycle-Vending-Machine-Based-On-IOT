@@ -119,7 +119,7 @@ Rectangle {
             border.width: 2; border.color: "#5A6B52"
             TapHandler {
                 onTapped: stackView.replace(
-                    "qrc:/Recycle_Vending_Machine_LCD/qml/QRCodePage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/QrLoginPage.qml")
             }
             Text { anchors.centerIn: parent
                    text: { langTick; return qsTr("Use QR instead") }

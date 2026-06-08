@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.3.2 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/VendingPage.qml
         qml/VendingReceiptPage.qml
         qml/QRCodePage.qml
+        qml/QrLoginPage.qml
         qml/SleepMode.qml
         qml/RecycleCountingPage.qml
         qml/LanguageSelectionPage.qml
@@ -102,6 +103,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         include/analytics.h             src/analytics.cpp
         include/logs_viewer.h           src/logs_viewer.cpp
         include/mqtt_client.h           src/mqtt_client.cpp
+        include/machine_link.h          src/machine_link.cpp
         include/idle_manager.h          src/idle_manager.cpp
         include/product_image_catalog.h src/product_image_catalog.cpp
         include/inventory_scanner.h     src/inventory_scanner.cpp

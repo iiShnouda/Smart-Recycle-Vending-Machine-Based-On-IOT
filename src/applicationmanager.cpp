@@ -13,6 +13,7 @@
 #include "../include/analytics.h"
 #include "../include/logs_viewer.h"
 #include "../include/mqtt_client.h"
+#include "../include/machine_link.h"
 #include "../include/idle_manager.h"
 #include <QTimer>
 #include "../include/product_image_catalog.h"
@@ -308,6 +309,15 @@ void ApplicationManager::initialize()
         m_mqtt->setTopicBase(QStringLiteral("rewingo/") + m_kioskId);
         m_mqtt->connectToBroker();
     }
+
+    // ── Machine link (Discord-style QR login via the backend /iot WS) ───
+    // A Python sidecar holds the WebSocket (the OS resolver works where Qt's
+    // can't). machineId == kiosk id so the phone app can target this kiosk.
+    m_machineLink = new MachineLink(this);
+    m_machineLink->configure(
+        m_kioskId,
+        QStringLiteral("wss://rewingo-backend-production.up.railway.app/iot"));
+    m_machineLink->start();
 
     // ── Update checker ─────────────────────────────────────────────────
     // Owner/name as it appears in the GitHub URL — bake yours in here,

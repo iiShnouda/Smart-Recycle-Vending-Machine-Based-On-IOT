@@ -5,6 +5,19 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-06-09
+
+### Added
+- **QR sign-in (Discord-style).** On the registration consent page, "Use QR"
+  now opens a real scannable QR (`QrLoginPage`). A Python sidecar
+  (`machine_link_sidecar.py`) holds a WebSocket to the backend's IoT endpoint
+  `wss://…/iot?type=machine&machineId=<kiosk id>` — using the OS resolver, which
+  works where Qt's network can't — and relays the user the phone app links. New
+  `MachineLink` C++ singleton; the QR PNG is fetched via curl. The kiosk shows
+  `REWINGO:<machineId>:<token>`; the phone app POSTs that to the backend's
+  `POST /api/machines/link`, which `sendToMachine()`s the user back to this
+  kiosk. machineId == the kiosk's id.
+
 ## [0.3.2] — 2026-06-07
 
 ### Added
