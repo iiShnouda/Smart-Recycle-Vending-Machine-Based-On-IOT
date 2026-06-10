@@ -10,6 +10,10 @@
 //
 // Run on Windows for dev:  npm install && npm start
 require('dotenv').config();
+// NOTE: use a STANDARD (non-SRV) MONGODB_URI. Some kiosk networks (phone
+// hotspots) block the SRV/TXT DNS lookups that mongodb+srv:// requires; the
+// standard seed-list URI resolves the shard hosts via plain A-records, which
+// work. See iot/kiosk-backend/.env.example.
 const mqtt    = require('mqtt');
 const express = require('express');
 const { MongoClient } = require('mongodb');
@@ -31,10 +35,16 @@ async function initMongo() {
     console.warn('[mongo] MONGODB_URI not set — running WITHOUT a database (MQTT still works).');
     return;
   }
-  const client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  db = client.db(MONGODB_DB);
-  console.log('[mongo] connected to db:', MONGODB_DB);
+  try {
+    const client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
+    await client.connect();
+    await client.db(MONGODB_DB).command({ ping: 1 });
+    db = client.db(MONGODB_DB);
+    console.log('[mongo] connected to db:', MONGODB_DB);
+  } catch (e) {
+    console.error('[mongo] connect failed (continuing without DB):', e.message);
+    db = null;
+  }
 }
 
 // ── HiveMQ (MQTT over TLS) ────────────────────────────────────────────────
@@ -105,7 +115,7 @@ app.post('/link', (req, res) => {
   res.json({ ok: true });
 });
 
-(async () => {
-  await initMongo();
-  app.listen(PORT, () => console.log('[http] kiosk-backend listening on :' + PORT));
-})();
+// Start the HTTP server immediately so /health + /link work even before (or
+// without) Mongo. Mongo connects in the background and is resilient to failure.
+app.listen(PORT, () => console.log('[http] kiosk-backend listening on :' + PORT));
+initMongo();
