@@ -37,7 +37,8 @@ Rectangle {
         bumpIdle()
         showQrNote = false
         if (!stackView) stackView = StackView.view
-        if (stackView) stackView.push(Qt.resolvedUrl("MainPage.qml"))
+        // Show the fixed machine QR for the phone app to scan (was: MainPage).
+        if (stackView) stackView.push(Qt.resolvedUrl("QrLoginPage.qml"))
     }
 
     Column {

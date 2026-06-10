@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     // Identity used by QSettings + QStandardPaths.
     QGuiApplication::setOrganizationName("ReWinGo");
     QGuiApplication::setOrganizationDomain("rewingo.local");
-    QGuiApplication::setApplicationName("ReWinGoKiosk");
+    QGuiApplication::setApplicationName("ReWinGo");
 
     ApplicationManager appManager;
     appManager.initialize();
@@ -75,7 +75,6 @@ int main(int argc, char *argv[])
     // Probe each in order. If none exist, dump the qrc contents so the
     // mismatch is visible at first launch instead of a cryptic crash.
     const QStringList candidates {
-        QStringLiteral(":/Recycle_Vending_Machine_LCD/qml/Main.qml"),
         QStringLiteral(":/Recycle_Vending_Machine_LCD/qml/Main.qml"),
         QStringLiteral(":/qml/Main.qml"),
     };

@@ -1,8 +1,8 @@
 #include "../include/machine_link.h"
+#include "../include/mqtt_client.h"
 #include "../include/logger.h"
 
 #include <QProcess>
-#include <QUuid>
 #include <QUrl>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -19,107 +19,69 @@ MachineLink::MachineLink(QObject *parent) : QObject(parent)
 
 MachineLink::~MachineLink()
 {
-    if (m_proc) { m_proc->kill(); m_proc->waitForFinished(300); }
     if (s_instance == this) s_instance = nullptr;
 }
 
-void MachineLink::configure(const QString &machineId, const QString &wsBase)
+void MachineLink::configure(const QString &machineId)
 {
     m_machineId = machineId;
-    m_wsBase    = wsBase;
-}
 
-QString MachineLink::resolvePython() const
-{
-#ifdef Q_OS_WIN
-    return QStringLiteral("python");
-#else
-    if (QFileInfo::exists("/opt/face_rec/.venv/bin/python"))
-        return QStringLiteral("/opt/face_rec/.venv/bin/python");
-    return QStringLiteral("/usr/bin/python3");
-#endif
-}
-
-QString MachineLink::resolveScriptDir() const
-{
-#ifdef Q_OS_WIN
-    return QStringLiteral(".");
-#else
-    return QStringLiteral("/opt/face_rec/scripts");
-#endif
-}
-
-void MachineLink::start()
-{
-    if (m_wsBase.isEmpty() || m_machineId.isEmpty()) return;
-    if (m_proc && m_proc->state() != QProcess::NotRunning) return;
-
-    const QString py     = resolvePython();
-    const QString script = resolveScriptDir() + "/machine_link_sidecar.py";
-    if (!QFileInfo::exists(py) || !QFileInfo::exists(script)) {
-        Logger::warn("MachineLink",
-                     QString("sidecar/python missing (py=%1 script=%2)").arg(py, script));
-        return;
-    }
-
-    m_proc = new QProcess(this);
-    m_proc->setProcessChannelMode(QProcess::MergedChannels);
-    connect(m_proc.data(), &QProcess::readyReadStandardOutput,
-            this, &MachineLink::onStdout);
-    connect(m_proc.data(), &QProcess::finished, this,
-            [this](int, QProcess::ExitStatus) { setConnected(false); });
-
-    m_proc->start(py, { QStringLiteral("-u"), script, m_wsBase, m_machineId });
-    Logger::audit("MachineLink", "Started link sidecar",
-                  { {"machineId", m_machineId}, {"ws", m_wsBase} });
-}
-
-void MachineLink::onStdout()
-{
-    if (!m_proc) return;
-    m_stdoutBuf += QString::fromUtf8(m_proc->readAllStandardOutput());
-
-    int nl;
-    while ((nl = m_stdoutBuf.indexOf('\n')) >= 0) {
-        const QString line = m_stdoutBuf.left(nl).trimmed();
-        m_stdoutBuf.remove(0, nl + 1);
-        if (line.isEmpty()) continue;
-
-        const QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8());
-        if (!doc.isObject()) { Logger::info("MachineLink", line); continue; }
-        const QJsonObject o = doc.object();
-        const QString     t = o.value("type").toString();
-
-        if      (t == "connected")    setConnected(true);
-        else if (t == "disconnected") setConnected(false);
-        else if (t == "login") {
-            if (m_token.isEmpty() || o.value("token").toString() != m_token)
-                continue;                       // not our QR session
-            const QJsonObject u = o.value("user").toObject();
-            setState(QStringLiteral("linked"));
-            emit loginReceived(u.value("id").toString(),
-                               u.value("name").toString(),
-                               u.value("points").toInt());
-        }
-        else if (t == "error" || t == "ws_error") {
-            Logger::warn("MachineLink", o.value("msg").toString());
-        }
+    // Hook onto the shared MQTT client. The backend publishes the linked
+    // user to rewingo/<machineId>/login, which MqttClient subscribes to on
+    // connect. libmosquitto uses the OS resolver, so it works on the kiosk
+    // networks where Qt's own network stack can't resolve the broker host.
+    if (MqttClient *mq = MqttClient::s_instance) {
+        connect(mq, &MqttClient::messageReceived, this,
+                [this](const QString &topic, const QString &payload) {
+            if (topic.endsWith(QStringLiteral("/login")))
+                handleLogin(payload);
+        });
+        connect(mq, &MqttClient::connectionChanged, this,
+                [this](bool ok) { setConnected(ok); });
+        setConnected(mq->isConnected());
+    } else {
+        Logger::warn("MachineLink", "No MqttClient instance — QR login disabled");
     }
 }
 
 void MachineLink::beginQrSession()
 {
-    m_token = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    renderQr(QStringLiteral("REWINGO:") + m_machineId + ":" + m_token);
-    setState(QStringLiteral("waiting"));
-    start();                                    // make sure the sidecar is up
+    m_sessionActive = true;
+
+    // Fixed, machine-specific QR. No per-session token — the same code shows
+    // every time; the backend keys the login on the machineId. The phone app
+    // scans "REWINGO:<machineId>" and POSTs it to the backend.
+    renderQr(QStringLiteral("REWINGO:") + m_machineId);
+    setState(m_connected ? QStringLiteral("waiting") : QStringLiteral("idle"));
     emit sessionChanged();
 }
 
 void MachineLink::cancel()
 {
-    m_token.clear();
+    m_sessionActive = false;
     setState(QStringLiteral("idle"));
+}
+
+void MachineLink::handleLogin(const QString &payload)
+{
+    if (!m_sessionActive) return;          // only while the QR screen is up
+
+    const QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
+    if (!doc.isObject()) return;
+    const QJsonObject o = doc.object();
+
+    // Accept either {"user":{...}} or a flat {id,name,points} payload.
+    const QJsonObject u = o.contains(QStringLiteral("user"))
+                              ? o.value("user").toObject() : o;
+    const QString id    = u.value("id").toString(u.value("userId").toString());
+    const QString name  = u.value("name").toString();
+    const int     points = u.value("points").toInt();
+    if (id.isEmpty() && name.isEmpty()) return;
+
+    setState(QStringLiteral("linked"));
+    Logger::audit("MachineLink", "QR login received",
+                  { {"machineId", m_machineId}, {"user", id} });
+    emit loginReceived(id, name, points);
 }
 
 void MachineLink::renderQr(const QString &payload)
@@ -129,7 +91,8 @@ void MachineLink::renderQr(const QString &payload)
     m_qrImagePath = dir + "/rewingo_qr.png";
 
     // Qt's network can't resolve hosts on some kiosk networks, so fetch the QR
-    // PNG with curl (which uses the OS resolver) into a temp file; QML shows it.
+    // PNG with curl (OS resolver) into a temp file; QML shows it. The payload
+    // is fixed, so this renders the same code every time.
     const QString url =
         QStringLiteral("https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=")
         + QString::fromUtf8(QUrl::toPercentEncoding(payload));
@@ -139,7 +102,7 @@ void MachineLink::renderQr(const QString &payload)
     connect(p, &QProcess::finished, this,
             [this, p](int, QProcess::ExitStatus) {
         p->deleteLater();
-        emit sessionChanged();                  // PNG ready → QML reloads it
+        emit sessionChanged();             // PNG ready → QML reloads it
     });
     p->start(QStringLiteral("curl"),
              { QStringLiteral("-fsSL"), QStringLiteral("--max-time"),

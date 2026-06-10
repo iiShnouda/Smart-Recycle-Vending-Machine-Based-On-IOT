@@ -172,7 +172,7 @@ Rectangle {
                        font.pixelSize: 50; font.weight: Font.Black
                        anchors.verticalCenter: parent.verticalCenter }
                 Text { text: qsTr("pts")
-                       color: "#A5F3FC"
+                       color: "#FFFFFF"
                        font.pixelSize: 24; font.weight: Font.DemiBold
                        anchors.verticalCenter: parent.verticalCenter }
             }

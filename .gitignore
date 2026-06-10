@@ -122,3 +122,5 @@ qml/translations.qml
 # Local-only diagnostic / scratch scripts (contain LAN credentials)
 _pi_diag.py
 _pi_*.py
+_pi_*.sh
+_pi_*.log

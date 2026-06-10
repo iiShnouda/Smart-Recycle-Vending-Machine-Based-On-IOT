@@ -230,6 +230,11 @@ void MqttClient::onConnectCb(struct mosquitto *m, void *self, int rc)
 
             const QByteArray cmdTopic = (c->m_topicBase + "/cmd").toUtf8();
             mosquitto_subscribe(m, nullptr, cmdTopic.constData(), 1);
+
+            // /login — the backend publishes the user the phone app linked
+            // after scanning this kiosk's QR. MachineLink listens for it.
+            const QByteArray loginTopic = (c->m_topicBase + "/login").toUtf8();
+            mosquitto_subscribe(m, nullptr, loginTopic.constData(), 1);
         }
     } else {
         Logger::warn("Mqtt", QString("Connect failed (rc=%1: %2)")

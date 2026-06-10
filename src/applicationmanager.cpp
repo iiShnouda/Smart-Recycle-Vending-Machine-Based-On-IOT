@@ -280,8 +280,23 @@ void ApplicationManager::initialize()
     int     mqttPort = 8883;
     bool    mqttTls  = true;
     {
-        QFile env("/etc/rewingo/.env");
+        // Broker host + creds live in a .env file. Linux: /etc/rewingo/.env.
+        // Windows (dev/testing): %APPDATA%/<org>/.env, then C:/rewingo/.env.
+        QString envPath = QStringLiteral("/etc/rewingo/.env");
+#ifdef Q_OS_WIN
+        const QString winCfg =
+            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+            + QStringLiteral("/.env");
+        if (QFile::exists(winCfg))
+            envPath = winCfg;
+        else if (QFile::exists(QStringLiteral("C:/rewingo/.env")))
+            envPath = QStringLiteral("C:/rewingo/.env");
+        else
+            envPath = winCfg;                    // for the log line below
+#endif
+        QFile env(envPath);
         if (env.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qInfo() << "[INIT] MQTT config from" << envPath;
             while (!env.atEnd()) {
                 QString line = QString::fromUtf8(env.readLine()).trimmed();
                 if (line.isEmpty() || line.startsWith('#')) continue;
@@ -310,14 +325,13 @@ void ApplicationManager::initialize()
         m_mqtt->connectToBroker();
     }
 
-    // ── Machine link (Discord-style QR login via the backend /iot WS) ───
-    // A Python sidecar holds the WebSocket (the OS resolver works where Qt's
-    // can't). machineId == kiosk id so the phone app can target this kiosk.
+    // ── Machine link (QR sign-in) ───────────────────────────────────────
+    // Fixed machine QR ("REWINGO:<kioskId>"). The linked user arrives over
+    // MQTT on rewingo/<kioskId>/login (published by the backend after the
+    // phone app scans). machineId == kiosk id. Configured AFTER MqttClient
+    // so it can hook onto MqttClient::s_instance.
     m_machineLink = new MachineLink(this);
-    m_machineLink->configure(
-        m_kioskId,
-        QStringLiteral("wss://rewingo-backend-production.up.railway.app/iot"));
-    m_machineLink->start();
+    m_machineLink->configure(m_kioskId);
 
     // ── Update checker ─────────────────────────────────────────────────
     // Owner/name as it appears in the GitHub URL — bake yours in here,

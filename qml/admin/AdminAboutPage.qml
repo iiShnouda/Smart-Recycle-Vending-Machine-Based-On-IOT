@@ -95,15 +95,8 @@ Rectangle {
         Column {
             anchors.centerIn: parent
             spacing: 12
-
             Text {
-                text: "♻"
-                color: "#16A34A"
-                font.pixelSize: 80
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            Text {
-                text: qsTr("ReWinGo Kiosk")
+                text: qsTr("ReWinGo")
                 color: "#1F2A1B"
                 font.pixelSize: 32; font.weight: Font.Black
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -199,6 +192,9 @@ Rectangle {
                 }
 
                 Rectangle {
+                    // Check → Install swap: this button hides the moment an
+                    // update is found; the green Install button below takes over.
+                    visible: !UpdateInfo.updateAvailable
                     width: 220; height: 56; radius: 28
                     color: UpdateInfo.busy ? "#9CA3AF" : "#0891B2"
                     anchors.verticalCenter: parent.verticalCenter

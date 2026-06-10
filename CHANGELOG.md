@@ -5,6 +5,28 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-06-11
+
+### Added
+- **HiveMQ Cloud IoT + fixed-QR sign-in.** Picking "QR Code" on the auth
+  screen now shows a **fixed machine QR** (`REWINGO:<kioskId>`) for the phone
+  app to scan — previously that path showed a note and dropped you on MainPage
+  with no QR at all. `MachineLink` was rewired off the WebSocket sidecar onto
+  the shared **HiveMQ MQTT** client: it listens on `rewingo/<kioskId>/login`
+  and signs the user in when the backend publishes them after a scan.
+- **`iot/kiosk-backend/`** — a dedicated Node.js LCD backend (separate from the
+  mobile-app backend). Bridges **HiveMQ ↔ MongoDB Atlas** (telemetry → Mongo)
+  and exposes `POST /link` to relay a scanned QR to `rewingo/<machineId>/login`.
+- `MqttClient` now subscribes to `<base>/login` as well as `<base>/cmd`.
+- Cross-platform broker config: the kiosk reads `.env` from `C:\rewingo\.env`
+  (or `%APPDATA%`) on Windows, `/etc/rewingo/.env` on the Pi.
+
+### Changed
+- **About → updates: Check → Install swap.** The "Check for updates" button now
+  hides the moment an update is found, leaving just the green "Download &
+  install vX.Y.Z" button — no more two-button confusion. Last-checked time
+  unchanged.
+
 ## [0.4.0] — 2026-06-09
 
 ### Added

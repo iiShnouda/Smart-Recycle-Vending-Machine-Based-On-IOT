@@ -12,7 +12,7 @@ Rectangle {
 
     // User info — wire from your auth flow
     property string userName: "Shnouda"
-    property int userPoints: 0
+    property int userPoints: 10000
 
     property int langTick: 0
     Connections {
@@ -64,10 +64,10 @@ Rectangle {
         Rectangle {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            height: 90
-            radius: 45
+            height: 100
+            radius: 50
             width: pointsRow.implicitWidth + 50
-            color: "#1A1D1A"
+            color: "#0891B2"
 
             Row {
                 id: pointsRow
@@ -84,14 +84,14 @@ Rectangle {
 
                 Text {
                     text: mainRect.userPoints
-                    color: "#00E5FF"
+                    color: "#FFFFFF"
                     font.pixelSize: 40
                     font.weight: Font.Black
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
                     text: { langTick; return qsTr("pts") }
-                    color: "#A5F3FC"
+                    color: "#FFFFFF"
                     font.pixelSize: 22
                     font.weight: Font.DemiBold
                     anchors.verticalCenter: parent.verticalCenter

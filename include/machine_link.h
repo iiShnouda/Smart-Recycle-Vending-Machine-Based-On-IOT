@@ -4,17 +4,16 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QString>
-#include <QPointer>
 
 class QProcess;
 
 /**
- * MachineLink — Discord-style QR login.
+ * MachineLink — QR sign-in for the kiosk.
  *
- * A small Python sidecar holds a WebSocket to the backend's /iot endpoint
- * (the OS resolver works there where Qt's network stack can't resolve the
- * host). We read the sidecar's stdout for the user the phone app linked, and
- * render the QR via curl. Exposed to QML as the `MachineLink` singleton.
+ * Shows a FIXED, machine-specific QR ("REWINGO:<machineId>") that the
+ * ReWinGo phone app scans. The app tells the backend, which publishes the
+ * linked user to rewingo/<machineId>/login over MQTT (HiveMQ Cloud). We
+ * listen for that on the shared MqttClient and log the user in.
  *
  *   QML: MachineLink.beginQrSession(); show MachineLink.qrImagePath;
  *        onLoginReceived(userId,name,points) -> log in.
@@ -34,16 +33,16 @@ public:
     static MachineLink *create(QQmlEngine *, QJSEngine *) { return s_instance; }
     static MachineLink *s_instance;
 
-    /** machineId = this kiosk's id; wsBase e.g. wss://host/iot (query added). */
-    void configure(const QString &machineId, const QString &wsBase);
-    void start();                       // launch the link sidecar
+    /** machineId = this kiosk's id. Hooks onto the shared MqttClient so the
+     *  login event on rewingo/<machineId>/login drives loginReceived(). */
+    void configure(const QString &machineId);
 
     bool    connected()   const { return m_connected; }
     QString qrImagePath() const { return m_qrImagePath; }
     QString state()       const { return m_state; }
 
 public slots:
-    /** Mint a new login token, render its QR, and ensure the sidecar is up. */
+    /** Render the fixed QR + arm the login listener. */
     Q_INVOKABLE void beginQrSession();
     Q_INVOKABLE void cancel();
 
@@ -54,24 +53,17 @@ signals:
     /** The backend relayed the user the phone scanned us with. */
     void loginReceived(const QString &userId, const QString &name, int points);
 
-private slots:
-    void onStdout();
-
 private:
     void setState(const QString &s);
     void setConnected(bool c);
     void renderQr(const QString &payload);
-    QString resolvePython() const;
-    QString resolveScriptDir() const;
+    void handleLogin(const QString &payload);
 
-    QPointer<QProcess> m_proc;
-    QString  m_stdoutBuf;
-    QString  m_machineId;
-    QString  m_wsBase;
-    QString  m_token;
-    QString  m_qrImagePath;
-    QString  m_state = QStringLiteral("idle");
-    bool     m_connected = false;
+    QString m_machineId;
+    QString m_qrImagePath;
+    QString m_state         = QStringLiteral("idle");
+    bool    m_connected     = false;
+    bool    m_sessionActive = false;
 };
 
 #endif // MACHINE_LINK_H
