@@ -19,6 +19,12 @@ Rectangle {
     property int previewTick: 0
     Timer { interval: 400; running: true; repeat: true; onTriggered: page.previewTick++ }
 
+    // 1-minute timeout — if nobody scans, leave the QR page (the token dies).
+    Timer {
+        interval: 60000; running: true; repeat: false
+        onTriggered: { MachineLink.cancel(); if (stackView) stackView.pop() }
+    }
+
     Component.onCompleted: { Idle.disable(); MachineLink.beginQrSession() }
     Component.onDestruction: MachineLink.cancel()
     StackView.onActivated:   Idle.disable()

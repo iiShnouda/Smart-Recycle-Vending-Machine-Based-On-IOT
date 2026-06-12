@@ -3,6 +3,10 @@
 #include "shiftreg.h"
 #include "bsp.h"
 
+/* Let the motor-select relay physically close before the TMC draws current,
+ * so it switches cold (no contact arcing). ~15-20 ms covers an SRD relay. */
+#define VEND_RELAY_SETTLE_MS 20
+
 static VendEmit      s_emit;
 static volatile bool s_busy;
 static uint8_t       s_slot;
@@ -21,9 +25,13 @@ bool Vend_Dispense(uint8_t slot0)
     s_slot = slot0;
     s_busy = true;
 
-    Stepper_SelectMotor(slot0);         /* 1. open this slot's gate */
-    BSP_TMC_Enable(true);               /* 2. energise the TMC      */
-    Stepper_Move(DRV_TMC, VEND_STEPS_PER_REV, VEND_STEP_HZ); /* one rev */
+    /* 1. RELAY first: route the TMC to this slot's motor while the TMC is
+     *    still off, so the relay switches cold; then wait for it to close. */
+    Stepper_SelectMotor(slot0);
+    HAL_Delay(VEND_RELAY_SETTLE_MS);
+    /* 2. TMC on + spin one revolution. 3+4 (TMC off, gate off) in Vend_Poll. */
+    BSP_TMC_Enable(true);
+    Stepper_Move(DRV_TMC, VEND_STEPS_PER_REV, VEND_STEP_HZ);
     return true;
 }
 

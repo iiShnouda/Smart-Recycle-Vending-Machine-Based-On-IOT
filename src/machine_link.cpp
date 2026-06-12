@@ -4,6 +4,7 @@
 
 #include <QProcess>
 #include <QUrl>
+#include <QUuid>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
@@ -48,10 +49,12 @@ void MachineLink::beginQrSession()
 {
     m_sessionActive = true;
 
-    // Fixed, machine-specific QR. No per-session token — the same code shows
-    // every time; the backend keys the login on the machineId. The phone app
-    // scans "REWINGO:<machineId>" and POSTs it to the backend.
-    renderQr(QStringLiteral("REWINGO:") + m_machineId);
+    // Discord-style: a fresh random token every time the QR screen opens, so
+    // each QR is unique and single-use. The phone scans
+    // "REWINGO:<machineId>:<token>" and echoes the token back; we only sign in
+    // if it matches this session (a stale/old QR can't log anyone in).
+    m_token = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+    renderQr(QStringLiteral("REWINGO:") + m_machineId + ":" + m_token);
     setState(m_connected ? QStringLiteral("waiting") : QStringLiteral("idle"));
     emit sessionChanged();
 }
@@ -59,6 +62,7 @@ void MachineLink::beginQrSession()
 void MachineLink::cancel()
 {
     m_sessionActive = false;
+    m_token.clear();
     setState(QStringLiteral("idle"));
 }
 
@@ -69,6 +73,10 @@ void MachineLink::handleLogin(const QString &payload)
     const QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
     if (!doc.isObject()) return;
     const QJsonObject o = doc.object();
+
+    // Discord-style single-use token: ignore any login that doesn't carry
+    // THIS session's token (an old/stale QR can't sign anyone in).
+    if (m_token.isEmpty() || o.value("token").toString() != m_token) return;
 
     // Accept either {"user":{...}} or a flat {id,name,points} payload.
     const QJsonObject u = o.contains(QStringLiteral("user"))

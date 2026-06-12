@@ -1,9 +1,9 @@
 /*
- * servo.c — door/flap servo on PB8 (TIM4_CH3).
+ * servo.c — door/flap servo on PB6 (TIM4_CH1).
  *
- * Standard hobby servo: 50 Hz frame, 1.0–2.0 ms pulse. Configure TIM4 in
- * CubeMX so the counter ticks at 1 MHz (PSC for 1 us) with ARR = 19999
- * (20 ms frame). Then CCR3 in microseconds = pulse width.
+ * Standard hobby servo: 50 Hz frame, 1.0–2.0 ms pulse. TIM4 ticks at 1 MHz
+ * (PSC 95 @ 96 MHz) with ARR = 19999 (20 ms frame), so CCR in microseconds
+ * = pulse width. The channel comes from SERVO_TIM_CH in pin_map.h.
  */
 #include "main.h"
 #include "pin_map.h"

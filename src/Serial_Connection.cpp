@@ -78,6 +78,11 @@ void Serial_Connection::openPort()
 {
     if (m_serial && m_serial->isOpen()) return;
 
+    // Logged-once guard: a missing STM32 used to print the "retrying" line
+    // every reconnect tick and flood the log. Now it's said once, then reset
+    // when we actually connect.
+    static bool s_warnedNoPort = false;
+
     // Lazily construct the QSerialPort. Wired only once per object lifetime.
     if (!m_serial) {
         m_serial = new QSerialPort(this);
@@ -94,7 +99,10 @@ void Serial_Connection::openPort()
     }
 
     if (port.isEmpty()) {
-        qWarning() << "[Serial] No matching device, retrying...";
+        if (!s_warnedNoPort) {
+            qWarning() << "[Serial] No STM32 detected — retrying quietly until it appears.";
+            s_warnedNoPort = true;
+        }
         m_reconnectTimer->start();
         return;
     }
@@ -114,6 +122,7 @@ void Serial_Connection::openPort()
         return;
     }
 
+    s_warnedNoPort = false;          // re-arm the once-only "no device" log
     qInfo() << "[Serial] Connected on" << port << "@" << m_baud;
     m_serial->clear();          // discard anything sitting in OS buffers
     m_rxBuffer.clear();

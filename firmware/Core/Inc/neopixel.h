@@ -1,11 +1,8 @@
 /*
- * neopixel.h — WS2812 strip on PA8 (TIM1_CH1 + DMA), via the 74HCT125
- * level shifter (3.3 V -> 5 V). Used to flood the inspection area with
- * white light while the camera classifies an item.
- *
- * CubeMX: TIM1 CH1 PWM, ARR = 124 (1.25 µs bit @ 800 kHz with a 100 MHz
- * timer clock), and enable the DMA request for TIM1_CH1 (memory->periph,
- * half-word, normal mode).
+ * neopixel.h — WS2812 strip on PB9, software bit-bang (this board has no
+ * level-shifter IC). Used to flood the inspection area with white light
+ * while the camera classifies an item. See neopixel.c for the timing; PB9
+ * must be a GPIO push-pull output at very-high speed (set in CubeMX).
  */
 #ifndef NEOPIXEL_H
 #define NEOPIXEL_H

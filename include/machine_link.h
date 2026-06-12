@@ -60,6 +60,7 @@ private:
     void handleLogin(const QString &payload);
 
     QString m_machineId;
+    QString m_token;            // per-session, single-use (Discord-style)
     QString m_qrImagePath;
     QString m_state         = QStringLiteral("idle");
     bool    m_connected     = false;

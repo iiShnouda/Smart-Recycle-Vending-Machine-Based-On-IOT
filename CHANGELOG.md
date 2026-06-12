@@ -5,6 +5,21 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-06-12
+
+### Changed
+- **QR sign-in is now single-use (Discord-style).** Each time the QR screen
+  opens, the kiosk mints a fresh random token (`REWINGO:<machineId>:<token>`)
+  and only accepts a login that echoes *that* session's token, so an old or
+  photographed QR can't sign anyone in. The QR page also **times out after
+  1 minute**.
+- **Admin → Diagnostics** realigned to the STM32 command set.
+
+### Fixed
+- **STM32 connection-log spam.** `Serial_Connection` logged "No matching
+  device, retrying…" on every reconnect tick while no STM32 was attached;
+  now it's said once and re-armed when the link connects.
+
 ## [0.5.0] — 2026-06-11
 
 ### Added

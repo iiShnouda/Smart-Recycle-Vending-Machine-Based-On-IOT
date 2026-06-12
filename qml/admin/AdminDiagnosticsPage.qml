@@ -182,9 +182,9 @@ Rectangle {
 
             // ── Link ──
             SectionHeader { title: qsTr("Link") }
-            TestRow { label: "PING";   cmd: "PING";
+            TestRow { label: "PING";       cmd: "PING";
                       onTriggered: Diagnostics.testPing() }
-            TestRow { label: "STATUS"; cmd: "STATUS";
+            TestRow { label: "IR sensors"; cmd: "IR";
                       onTriggered: Diagnostics.testStatus() }
 
             // ── Steppers ──
@@ -196,7 +196,7 @@ Rectangle {
                 model: 8
                 delegate: TestRow {
                     label: qsTr("Stepper ") + (index + 1)
-                    cmd: "STEP:" + (index + 1) + ":1600:0"
+                    cmd: "DISPENSE " + index            // 0-based slot, matches the runner
                     buttonText: qsTr("Spin")
                     buttonColor: "#7A8B6A"
                     onTriggered: Diagnostics.testMotor(index + 1)
