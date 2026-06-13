@@ -19,10 +19,15 @@ Rectangle {
     property int previewTick: 0
     Timer { interval: 400; running: true; repeat: true; onTriggered: page.previewTick++ }
 
-    // 1-minute timeout — if nobody scans, leave the QR page (the token dies).
+    // 1-minute timeout — if nobody scans, the token dies and we go all the way
+    // back to the START screen (SleepMode at the stack root), not just one page
+    // back. Mirrors the idle-timeout behaviour in Main.qml.
     Timer {
         interval: 60000; running: true; repeat: false
-        onTriggered: { MachineLink.cancel(); if (stackView) stackView.pop() }
+        onTriggered: {
+            MachineLink.cancel()
+            if (stackView) while (stackView.depth > 1) stackView.pop()
+        }
     }
 
     Component.onCompleted: { Idle.disable(); MachineLink.beginQrSession() }
@@ -56,7 +61,7 @@ Rectangle {
                color: "#1F2A1B"; font.pixelSize: 52; font.weight: Font.Black
                anchors.horizontalCenter: parent.horizontalCenter }
         Text { text: { langTick; return qsTr("Open the ReWinGo app and scan this code") }
-               color: "#5A6B52"; font.pixelSize: 20
+               color: "#5A6B52"; font.pixelSize: 26; font.weight: Font.DemiBold
                anchors.horizontalCenter: parent.horizontalCenter }
     }
 
@@ -65,13 +70,13 @@ Rectangle {
         id: warn
         anchors.top: parent.top; anchors.topMargin: 150
         anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.72; height: 76; radius: 16
+        width: parent.width * 0.78; height: 104; radius: 16
         color: "#FEF3C7"; border.width: 2; border.color: "#FBBF24"
         Text {
             anchors.centerIn: parent; width: parent.width - 32
             horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             text: { langTick; return qsTr("By scanning, you agree to link this machine to your ReWinGo account and share your name & points.") }
-            color: "#92400E"; font.pixelSize: 15
+            color: "#92400E"; font.pixelSize: 20; font.weight: Font.DemiBold
         }
     }
 
@@ -111,7 +116,7 @@ Rectangle {
                                          : qsTr("Connecting…")
         }
         color: MachineLink.state === "linked" ? "#16A34A" : "#5A6B52"
-        font.pixelSize: 18; font.weight: Font.DemiBold
+        font.pixelSize: 32; font.weight: Font.Bold
 
         SequentialAnimation on opacity {
             running: MachineLink.state !== "linked"

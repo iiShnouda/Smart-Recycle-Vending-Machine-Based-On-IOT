@@ -96,8 +96,11 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 20
             width: 160; height: 60; radius: 30
-            color: "#0891B2"
+            color: rescanTap.pressed ? "#0E7490" : "#0891B2"
+            scale: rescanTap.pressed ? 0.93 : 1.0
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
             TapHandler {
+                id: rescanTap
                 onTapped: { appManager.rescanInventoryNow(); page.refresh() }
             }
             Text { anchors.centerIn: parent; text: qsTr("Rescan now")

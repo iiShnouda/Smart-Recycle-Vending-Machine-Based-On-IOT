@@ -47,11 +47,15 @@ Rectangle {
             spacing: 10
             Rectangle {
                 width: 80; height: 80; radius: 40
-                color: "transparent"
+                color: logsRefreshTap.pressed ? "#0E7490" : "transparent"
                 border.width: 2; border.color: "#A5F3FC"
-                TapHandler { onTapped: LogsViewer.refresh() }
-                Text { anchors.centerIn: parent; text: "↻"
-                       color: "#A5F3FC"; font.pixelSize: 36; font.weight: Font.Black }
+                scale: logsRefreshTap.pressed ? 0.9 : 1.0
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
+                TapHandler { id: logsRefreshTap; onTapped: { logsSpin.restart(); LogsViewer.refresh() } }
+                Text { id: logsRefreshIcon; anchors.centerIn: parent; text: "↻"
+                       color: "#A5F3FC"; font.pixelSize: 36; font.weight: Font.Black
+                       RotationAnimation { id: logsSpin; target: logsRefreshIcon; from: 0; to: 360
+                                           duration: 500; easing.type: Easing.OutCubic; running: false } }
             }
         }
     }

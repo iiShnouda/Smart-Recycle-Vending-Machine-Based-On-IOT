@@ -198,7 +198,10 @@ Rectangle {
                     width: 220; height: 56; radius: 28
                     color: UpdateInfo.busy ? "#9CA3AF" : "#0891B2"
                     anchors.verticalCenter: parent.verticalCenter
+                    scale: checkTap.pressed ? 0.93 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
                     TapHandler {
+                        id: checkTap
                         enabled: !UpdateInfo.busy
                         onTapped: UpdateInfo.checkNow()
                     }
@@ -227,8 +230,11 @@ Rectangle {
                 visible: UpdateInfo.updateAvailable
                 width: parent.width; height: 70; radius: 35
                 color: updateCard.installStatus !== "" ? "#9CA3AF" : "#16A34A"
+                scale: installTap.pressed ? 0.97 : 1.0
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
 
                 TapHandler {
+                    id: installTap
                     enabled: updateCard.installStatus === ""
                     onTapped: UpdateInfo.downloadAndInstall()
                 }
@@ -408,11 +414,13 @@ Rectangle {
 
                     Rectangle {
                         width: 200; height: 72; radius: 36; color: "#16A34A"
+                        scale: popupInstallTap.pressed ? 0.95 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
                         Text { anchors.centerIn: parent
                                text: qsTr("Install now")
                                color: "#FFFFFF"; font.pixelSize: 22
                                font.weight: Font.ExtraBold }
-                        TapHandler { onTapped: UpdateInfo.downloadAndInstall() }
+                        TapHandler { id: popupInstallTap; onTapped: UpdateInfo.downloadAndInstall() }
                     }
                     Rectangle {
                         width: 160; height: 72; radius: 36

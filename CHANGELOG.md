@@ -5,6 +5,35 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-06-14
+
+### Fixed
+- **QR sign-in timeout returns to the START screen.** When the 1-minute QR timer
+  expired it only popped one page back; now it pops all the way to SleepMode
+  (the stack root), matching the idle-timeout behaviour.
+- **Update button — bulletproof install + clear feedback.** The `.deb` now always
+  downloads to `/tmp` (the only path the sudoers rule permits `dpkg -i` on, so a
+  per-user temp dir can't cause a silent sudo denial). If the helper script is
+  ever missing or won't launch, `UpdateChecker` now runs the proven install
+  sequence **inline** via a detached shell as a fallback, and logs every step
+  (helper launch OK/FAILED + fallback). The Check / Install / "Install now"
+  buttons now animate on press so a tap is unmistakably registered.
+
+### Added
+- **"Back to Main Menu" on both receipts.** After recycling (`RecycleSummaryPage`)
+  or vending (`VendingReceiptPage`), a new button returns to the user's Main page
+  **without logging out**, so they can start another action; "Finish"/"Done"
+  still go all the way home.
+
+### Changed
+- **Press animations across admin actions.** Every refresh / rescan / run / clear
+  button in the admin panel (Analytics, Logs, Products, Inventory, Faults,
+  Diagnostics) now scales + darkens on press, and the circular ↻ refresh icons
+  spin on tap — clear "I pressed it" feedback.
+- **Bigger QR-screen text.** The "Connecting… / Waiting to scan" status, the
+  "scan this code" subtitle, and the privacy notice are all enlarged for
+  readability across the room.
+
 ## [0.9.0] — 2026-06-13
 
 ### Added

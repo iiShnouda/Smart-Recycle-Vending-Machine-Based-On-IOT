@@ -84,15 +84,20 @@ Rectangle {
 
             Rectangle {
                 width: 130; height: 60; radius: 30
-                color: "#0891B2"
-                TapHandler { onTapped: refresh() }
+                color: faultRefreshTap.pressed ? "#0E7490" : "#0891B2"
+                scale: faultRefreshTap.pressed ? 0.93 : 1.0
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
+                TapHandler { id: faultRefreshTap; onTapped: refresh() }
                 Text { anchors.centerIn: parent; text: qsTr("Refresh")
                        color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.Bold }
             }
             Rectangle {
                 width: 130; height: 60; radius: 30
-                color: "#DC2626"
+                color: faultClearTap.pressed ? "#991B1B" : "#DC2626"
+                scale: faultClearTap.pressed ? 0.93 : 1.0
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
                 TapHandler {
+                    id: faultClearTap
                     onTapped: {
                         const n = appManager.clearDispenseFaults()
                         console.log("Cleared", n, "fault rows")

@@ -20,6 +20,15 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
+    // Return to the user's Main page (the menu) WITHOUT logging out — pops back
+    // to the existing MainPage in the stack, keeping the session. Falls back to
+    // the start screen if MainPage isn't on the stack for some reason.
+    function goMain() {
+        var mp = stackView.find(function(item) { return item.objectName === "mainPage" })
+        if (mp) stackView.pop(mp)
+        else while (stackView && stackView.depth > 1) stackView.pop()
+    }
+
     // Header
     Column {
         id: header
@@ -225,7 +234,11 @@ Rectangle {
                     border.width: 2
                     border.color: "#7A8B6A"
 
+                    scale: finishTap.pressed ? 0.95 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                     TapHandler {
+                        id: finishTap
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                         onTapped: {
                             while (stackView && stackView.depth > 1) stackView.pop()
@@ -275,7 +288,11 @@ Rectangle {
                     radius: 28
                     color: "#1A1D1A"
 
+                    scale: vendingTap.pressed ? 0.95 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                     TapHandler {
+                        id: vendingTap
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                         onTapped: stackView.push(Qt.resolvedUrl("VendingPage.qml"))
                     }
@@ -300,6 +317,29 @@ Rectangle {
                         }
                     }
                 }
+            }
+        }
+
+        // Back to the Main menu (stay logged in for another action)
+        Rectangle {
+            width: parent.width
+            height: 104
+            radius: 28
+            color: "#0891B2"
+            scale: mainTap.pressed ? 0.96 : 1.0
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+            TapHandler {
+                id: mainTap
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
+                onTapped: summaryPage.goMain()
+            }
+            Row {
+                anchors.centerIn: parent; spacing: 12
+                Text { text: "⌂"; color: "#FFFFFF"; font.pixelSize: 34; font.weight: Font.Black
+                       anchors.verticalCenter: parent.verticalCenter }
+                Text { text: { langTick; return qsTr("Back to Main Menu") }
+                       color: "#FFFFFF"; font.pixelSize: 32; font.weight: Font.ExtraBold
+                       anchors.verticalCenter: parent.verticalCenter }
             }
         }
     }

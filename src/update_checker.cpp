@@ -234,8 +234,16 @@ void UpdateChecker::downloadAndInstall()
         return;
     }
 
+    // The .deb MUST land in /tmp: the sudoers rule only grants passwordless
+    // `dpkg -i /tmp/rewingo_*.deb`. QStandardPaths::TempLocation can resolve to
+    // a per-user runtime dir on some sessions, which the sudoers rule would
+    // reject — so on Linux we pin /tmp explicitly. (Windows uses TempLocation.)
+#ifdef Q_OS_WIN
     const QString tmpDir = QStandardPaths::writableLocation(
                                QStandardPaths::TempLocation);
+#else
+    const QString tmpDir = QStringLiteral("/tmp");
+#endif
     QDir().mkpath(tmpDir);
     const QString localPath =
         tmpDir + "/rewingo_" + m_latestVersion + "_arm64.deb";
@@ -299,16 +307,42 @@ void UpdateChecker::launchHelperAndExit(const QString &localPath)
     const QStringList args { localPath };
 
     qint64 pid = 0;
-    const bool ok =
-        QProcess::startDetached(helper, args, QDir::tempPath(), &pid);
+    bool ok = false;
+    if (QFileInfo::exists(helper)) {
+        ok = QProcess::startDetached(helper, args, QDir::tempPath(), &pid);
+        Logger::audit("Updater",
+                      QString("Helper launch %1 (pid=%2): %3 %4")
+                          .arg(ok ? "OK" : "FAILED").arg(pid).arg(helper, localPath));
+    } else {
+        Logger::warn("Updater",
+                     QString("Helper not found at %1 — using inline fallback").arg(helper));
+    }
+
+    // Fallback: if the helper script is missing or wouldn't launch, run the
+    // proven install sequence inline via a detached shell — install (tolerating
+    // the unrelated initramfs-tools trigger), then kill the kiosk so the
+    // autostart loop relaunches the freshly-installed binary. This guarantees
+    // the button works even if /usr/local/bin/rewingo-update-helper is gone.
     if (!ok) {
-        emit installFailed(tr("Could not launch update helper: %1")
-                               .arg(helper));
+        const QString script =
+            QStringLiteral("sudo /usr/bin/dpkg -i '%1'; "
+                           "rm -f '%1'; "
+                           "sleep 1; pkill -x rewingo; "
+                           "sleep 4; pgrep -x rewingo >/dev/null || "
+                           "setsid nohup /usr/local/bin/rewingo >/dev/null 2>&1 < /dev/null &")
+                .arg(localPath);
+        ok = QProcess::startDetached(QStringLiteral("/bin/bash"),
+                                     { QStringLiteral("-lc"), script },
+                                     QDir::tempPath(), &pid);
+        Logger::audit("Updater",
+                      QString("Inline fallback install %1 (pid=%2)")
+                          .arg(ok ? "launched" : "FAILED").arg(pid));
+    }
+
+    if (!ok) {
+        emit installFailed(tr("Could not start the installer."));
         return;
     }
-    Logger::audit("Updater",
-                  QString("Helper launched (pid=%1); installing in background, "
-                          "kiosk will restart when done.").arg(pid));
     emit installFinished(QString());
 }
 

@@ -43,11 +43,15 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 30
             width: 80; height: 80; radius: 40
-            color: "transparent"
+            color: refreshTap.pressed ? "#0E7490" : "transparent"
             border.width: 2; border.color: "#A5F3FC"
-            TapHandler { onTapped: Analytics.refresh() }
-            Text { anchors.centerIn: parent; text: "↻"
-                   color: "#A5F3FC"; font.pixelSize: 36; font.weight: Font.Black }
+            scale: refreshTap.pressed ? 0.9 : 1.0
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
+            TapHandler { id: refreshTap; onTapped: { spinAnim.restart(); Analytics.refresh() } }
+            Text { id: refreshIcon; anchors.centerIn: parent; text: "↻"
+                   color: "#A5F3FC"; font.pixelSize: 36; font.weight: Font.Black
+                   RotationAnimation { id: spinAnim; target: refreshIcon; from: 0; to: 360
+                                       duration: 500; easing.type: Easing.OutCubic; running: false } }
         }
     }
 

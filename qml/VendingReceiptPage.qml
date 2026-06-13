@@ -24,6 +24,13 @@ Rectangle {
     Connections { target: appManager; function onLanguageChanged() { langTick++ } }
     Component.onCompleted: Idle.touch()
 
+    // Return to the user's Main page (menu) without logging out.
+    function goMain() {
+        var mp = stackView.find(function(item) { return item.objectName === "mainPage" })
+        if (mp) stackView.pop(mp)
+        else while (stackView && stackView.depth > 1) stackView.pop()
+    }
+
     // ── Header ──
     Column {
         id: header
@@ -117,15 +124,36 @@ Rectangle {
                            anchors.verticalCenter: parent.verticalCenter } } }
         }
 
-        Rectangle {
-            width: 420; height: 100; radius: 50; color: "#1A1D1A"
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            scale: doneTap.pressed ? 0.95 : 1.0
-            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
-            TapHandler { id: doneTap
-                onTapped: { while (stackView && stackView.depth > 1) stackView.pop() } }
-            Text { anchors.centerIn: parent; text: { langTick; return qsTr("Done") }
-                   color: "#FFFFFF"; font.pixelSize: 34; font.weight: Font.ExtraBold }
+            spacing: 24
+
+            // Back to Main Menu (stay logged in)
+            Rectangle {
+                width: 320; height: 100; radius: 50; color: "#0891B2"
+                scale: mainTap.pressed ? 0.95 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+                TapHandler { id: mainTap; onTapped: page.goMain() }
+                Row {
+                    anchors.centerIn: parent; spacing: 10
+                    Text { text: "⌂"; color: "#FFFFFF"; font.pixelSize: 32; font.weight: Font.Black
+                           anchors.verticalCenter: parent.verticalCenter }
+                    Text { text: { langTick; return qsTr("Main Menu") }
+                           color: "#FFFFFF"; font.pixelSize: 30; font.weight: Font.ExtraBold
+                           anchors.verticalCenter: parent.verticalCenter }
+                }
+            }
+
+            // Done → home (logout to start screen)
+            Rectangle {
+                width: 320; height: 100; radius: 50; color: "#1A1D1A"
+                scale: doneTap.pressed ? 0.95 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+                TapHandler { id: doneTap
+                    onTapped: { while (stackView && stackView.depth > 1) stackView.pop() } }
+                Text { anchors.centerIn: parent; text: { langTick; return qsTr("Done") }
+                       color: "#FFFFFF"; font.pixelSize: 34; font.weight: Font.ExtraBold }
+            }
         }
     }
 }

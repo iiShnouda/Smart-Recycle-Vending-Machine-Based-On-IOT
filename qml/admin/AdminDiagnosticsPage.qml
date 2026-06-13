@@ -50,8 +50,10 @@ Rectangle {
             spacing: 10
             Rectangle {
                 width: 160; height: 80; radius: 40
-                color: "#0891B2"
-                TapHandler { onTapped: Diagnostics.testRunAll() }
+                color: runAllTap.pressed ? "#0E7490" : "#0891B2"
+                scale: runAllTap.pressed ? 0.93 : 1.0
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
+                TapHandler { id: runAllTap; onTapped: Diagnostics.testRunAll() }
                 Row {
                     anchors.centerIn: parent; spacing: 8
                     Text { text: "▶"; color: "#FFFFFF"
