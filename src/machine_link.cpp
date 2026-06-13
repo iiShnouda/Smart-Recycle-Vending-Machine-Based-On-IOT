@@ -64,6 +64,31 @@ void MachineLink::beginQrSession()
     emit sessionChanged();
 }
 
+void MachineLink::beginClaim(const QString &name, const QString &phone)
+{
+    // One-time claim token. The phone app scans "REWINGO-CLAIM:<token>" and the
+    // backend (which we tell about the pending account now) auto-links it to the
+    // logged-in app user — no password.
+    m_claimToken = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+
+    if (MqttClient *mq = MqttClient::s_instance) {
+        QJsonObject o;
+        o.insert(QStringLiteral("name"),  name);
+        o.insert(QStringLiteral("phone"), phone);
+        o.insert(QStringLiteral("token"), m_claimToken);
+        mq->publishJson(QStringLiteral("register"), o, /*qos*/ 1, /*retain*/ false);
+        Logger::audit("MachineLink", "pending account published for claim",
+                      { {"machineId", m_machineId}, {"token", m_claimToken} });
+    } else {
+        Logger::warn("MachineLink", "beginClaim: no MqttClient — can't register pending account");
+    }
+
+    // Reuse the QR renderer (writes qrImagePath). The claim screen and the login
+    // screen are never shown at the same time, so sharing the path is fine.
+    renderQr(QStringLiteral("REWINGO-CLAIM:") + m_claimToken);
+    emit claimChanged();
+}
+
 void MachineLink::cancel()
 {
     m_sessionActive = false;

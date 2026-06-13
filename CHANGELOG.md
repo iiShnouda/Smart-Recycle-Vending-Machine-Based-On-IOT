@@ -5,6 +5,29 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — 2026-06-14
+
+### Added
+- **Connect-the-app account claim (optional, no password).** After registration,
+  a new optional **"Connect the mobile app"** button on the complete page opens
+  `ClaimQrPage`, which mints a one-time token, publishes the pending account to
+  the backend (`rewingo/<machineId>/register` over MQTT), and shows a
+  **`REWINGO-CLAIM:<token>`** QR. The phone app (logged in) scans it and the
+  backend **auto-links** the kiosk account to that app user — they then set a
+  password + email in the app. Skipping ("Maybe later") always finishes
+  registration; it's never required.
+  - Kiosk: `MachineLink.beginClaim(name, phone)` + `claimToken`.
+  - Backend (`iot/kiosk-backend`): subscribes `rewingo/+/register` → upserts a
+    `pending_accounts` doc; new **`POST /claim { token, appUser:{id,email} }`**
+    finds the pending account, links it into `accounts`, marks it claimed.
+  - *App side (your part):* scan `REWINGO-CLAIM:<token>` → `POST /claim`.
+
+### Fixed
+- **Registration details page was missing from the build.** `RegistrationDetailsPage.qml`
+  (added in 0.9.0) was never listed in the QML module, so the build silently
+  excluded it and "I agree" would have failed to open the name/mobile page at
+  runtime. Registered it (and `ClaimQrPage.qml`) in CMake.
+
 ## [0.11.0] — 2026-06-14
 
 ### Changed

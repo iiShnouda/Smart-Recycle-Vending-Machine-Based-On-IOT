@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.11.0 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.12.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -78,8 +78,10 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/admin/CatalogPickerDialog.qml
         qml/admin/NewProductDialog.qml
         qml/registration/ConsentPage.qml
+        qml/registration/RegistrationDetailsPage.qml
         qml/registration/FaceEnrollPage.qml
         qml/registration/RegistrationCompletePage.qml
+        qml/registration/ClaimQrPage.qml
 
 
         components/PrimaryButton.qml

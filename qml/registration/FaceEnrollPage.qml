@@ -49,7 +49,8 @@ Rectangle {
         function onEnrolled(name) {
             stackView.replace(
                 "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
-                { userId: page.newUserId })
+                { userId: page.newUserId, userName: page.newUserName,
+                  userMobile: page.newUserMobile })
         }
         function onFailed(reason) {
             errorBanner.text = qsTr("Couldn't register: ") + reason

@@ -61,6 +61,7 @@ mq.on('connect', () => {
     'rewingo/+/status',
     'rewingo/+/fault',
     'rewingo/+/inventory',
+    'rewingo/+/register',     // a kiosk created a pending account to be claimed
   ], err => err && console.error('[mqtt] subscribe error', err.message));
 });
 mq.on('error',     e => console.error('[mqtt] error:', e.message));
@@ -87,6 +88,15 @@ mq.on('message', async (topic, buf) => {
     else if (kind === 'status')
       await db.collection('kiosks').updateOne(
         { machineId }, { $set: { machineId, status: body, ts } }, { upsert: true });
+    else if (kind === 'register' && body.token)
+      // A user registered their face at the kiosk and wants to connect the
+      // phone app. Stash a pending account keyed by the one-time token; the
+      // app claims it by scanning "REWINGO-CLAIM:<token>" (see POST /claim).
+      await db.collection('pending_accounts').updateOne(
+        { token: body.token },
+        { $set: { token: body.token, name: body.name || '', phone: body.phone || '',
+                  machineId, points: 0, claimed: false, ts } },
+        { upsert: true });
   } catch (e) {
     console.error('[mongo] write failed:', e.message);
   }
@@ -113,6 +123,44 @@ app.post('/link', (req, res) => {
     return res.status(400).json({ error: 'machineId and user are required' });
   sendUserToMachine(machineId, user);
   res.json({ ok: true });
+});
+
+// POST /claim  { token, appUser: { id, name?, email? } }
+// The phone app scanned "REWINGO-CLAIM:<token>" and claims the pending account
+// created at the kiosk, AUTO-LINKING it to the already-logged-in app user — no
+// password needed. Returns the linked account so the app can show it.
+app.post('/claim', async (req, res) => {
+  const { token, appUser } = req.body || {};
+  if (!token || !appUser || !appUser.id)
+    return res.status(400).json({ error: 'token and appUser.id are required' });
+  if (!db) return res.status(503).json({ error: 'database unavailable' });
+  try {
+    const pending = await db.collection('pending_accounts').findOne({ token });
+    if (!pending)
+      return res.status(404).json({ error: 'invalid or expired claim code' });
+    if (pending.claimed)
+      return res.status(409).json({ error: 'this code was already used' });
+
+    const account = {
+      appUserId:     appUser.id,
+      name:          pending.name,
+      phone:         pending.phone,
+      points:        pending.points || 0,
+      faceMachineId: pending.machineId,
+      email:         appUser.email || null,
+      claimedAt:     new Date(),
+    };
+    await db.collection('accounts').updateOne(
+      { appUserId: appUser.id }, { $set: account }, { upsert: true });
+    await db.collection('pending_accounts').updateOne(
+      { token }, { $set: { claimed: true, claimedBy: appUser.id, claimedAt: new Date() } });
+
+    console.log('[claim] linked', pending.phone, '→ app user', appUser.id);
+    res.json({ ok: true, account });
+  } catch (e) {
+    console.error('[claim] failed:', e.message);
+    res.status(500).json({ error: 'claim failed' });
+  }
 });
 
 // Start the HTTP server immediately so /health + /link work even before (or
