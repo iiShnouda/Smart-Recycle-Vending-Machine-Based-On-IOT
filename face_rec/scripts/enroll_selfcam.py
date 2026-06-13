@@ -1,0 +1,176 @@
+"""Self-capturing enrollment sidecar for the kiosk.
+
+Unlike scripts.enroll_user (which opens cv2 windows and waits for SPACE key
+presses — impossible on a touchscreen kiosk), this OPENS THE CAMERA ITSELF,
+auto-advances through 3 head poses with NO screen press, writes a live preview
+frame to /tmp/rewingo_face.jpg (the kiosk shows it in the round window), and
+stores the averaged ArcFace embedding in the SAME faces.db that
+scripts.sidecar_identify_selfcam reads — so an enrolled user is recognised at
+login.
+
+The user's name is read from the first stdin line (the kiosk writes it).
+
+Line-JSON protocol (one object per line):
+    {"e":"stage","stage":"FRONT","count":0,"total":3}
+    {"e":"progress","count":1,"total":3}
+    {"e":"enrolled","name":"Bavly","user_id":7,"frames":210}
+    {"e":"error","msg":"..."}
+
+DEPLOY: copy to /opt/face_rec/scripts/enroll_selfcam.py on the Pi.
+"""
+import sys, os, json, time
+from pathlib import Path
+import cv2
+import numpy as np
+import onnxruntime as ort
+from app.db_utils import init_db, insert_user
+
+MODEL_PATH   = Path("models") / "arcface.onnx"
+YUNET_PATH   = Path("models") / "face_detection_yunet_2023mar.onnx"
+CAM_INDEX    = int(os.environ.get("FACE_CAM_INDEX", "0"))      # 0 = /dev/video0
+PREVIEW_PATH = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
+TOTAL_POSES  = 3
+STEP_TIMEOUT = float(os.environ.get("ENROLL_STEP_SEC", "7"))   # per-pose cap
+
+
+def emit(o):
+    sys.stdout.write(json.dumps(o) + "\n")
+    sys.stdout.flush()
+
+
+def l2n(v, e=1e-10):
+    return v / (np.linalg.norm(v) + e)
+
+
+def open_camera():
+    """Open the UVC webcam via V4L2 with a warm-up — same dependable path as
+    the identify sidecar (the default backend can deliver zero frames, and the
+    first grabs after open fail while the camera powers on)."""
+    cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(CAM_INDEX)
+    if not cap.isOpened():
+        return None
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    t0 = time.time()
+    while time.time() - t0 < 2.0:
+        ok, _ = cap.read()
+        if ok:
+            break
+        time.sleep(0.05)
+    return cap
+
+
+def write_preview(fr):
+    try:
+        ok, buf = cv2.imencode(".jpg", cv2.resize(fr, (480, 360)),
+                               [cv2.IMWRITE_JPEG_QUALITY, 70])
+        if ok:
+            tmp = PREVIEW_PATH + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(buf.tobytes())
+            os.replace(tmp, PREVIEW_PATH)
+    except Exception:
+        pass
+
+
+def yaw_of(face):
+    """Rough head yaw from YuNet landmarks: nose-x offset from the eye midline,
+    normalised by eye span. >0 → turned one way, <0 → the other."""
+    r_eye_x, l_eye_x, nose_x = float(face[4]), float(face[6]), float(face[8])
+    mid  = (r_eye_x + l_eye_x) / 2.0
+    span = abs(l_eye_x - r_eye_x) + 1e-6
+    return (nose_x - mid) / span
+
+
+def main():
+    if not MODEL_PATH.exists():
+        emit({"e": "error", "msg": "arcface.onnx not found"}); return
+
+    # Name from the first stdin line (kiosk writes it). Fall back gracefully.
+    try:
+        name = sys.stdin.readline().strip()
+    except Exception:
+        name = ""
+    if not name:
+        name = "New User"
+
+    init_db()
+    det = cv2.FaceDetectorYN.create(str(YUNET_PATH), "", (320, 320),
+                                    score_threshold=0.7, nms_threshold=0.3, top_k=5)
+    sess = ort.InferenceSession(str(MODEL_PATH), providers=["CPUExecutionProvider"])
+    iname  = sess.get_inputs()[0].name
+    ishape = tuple(sess.get_inputs()[0].shape)
+
+    cap = open_camera()
+    if cap is None:
+        emit({"e": "error", "msg": "camera open failed"}); return
+
+    def embed(face_bgr):
+        img = cv2.resize(face_bgr, (112, 112)).astype(np.float32)
+        img = (img - 127.5) / 128.0
+        if len(ishape) == 4 and ishape[1] == 3:
+            img = np.transpose(img, (2, 0, 1))
+        return l2n(sess.run(None, {iname: np.expand_dims(img, 0)})[0][0].astype(np.float32))
+
+    # Three poses, auto-advanced. The predicate is a *preference*: if the user
+    # doesn't turn enough within STEP_TIMEOUT we still capture the last good
+    # face, so enrollment always completes (no screen press, no getting stuck).
+    poses = [
+        ("FRONT", lambda y: abs(y) < 0.12),
+        ("LEFT",  lambda y: y <= -0.13),
+        ("RIGHT", lambda y: y >= 0.13),
+    ]
+
+    embeddings = []
+    grabbed = 0
+    for idx, (label, pred) in enumerate(poses):
+        emit({"e": "stage", "stage": label, "count": idx, "total": TOTAL_POSES})
+        t_end = time.time() + STEP_TIMEOUT
+        captured = None
+        last_face_emb = None
+        while time.time() < t_end:
+            ok, fr = cap.read()
+            if not ok or fr is None:
+                continue
+            grabbed += 1
+            write_preview(fr)
+            H, W = fr.shape[:2]
+            det.setInputSize((W, H))
+            _, faces = det.detect(fr)
+            if faces is None or len(faces) == 0:
+                continue
+            b = max(faces, key=lambda f: f[-1])
+            x, y, bw, bh = b[:4].astype(int)
+            x1, y1 = max(0, x), max(0, y)
+            x2, y2 = min(W, x + bw), min(H, y + bh)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            last_face_emb = embed(fr[y1:y2, x1:x2])
+            if pred(yaw_of(b)):
+                captured = last_face_emb
+                break
+        use = captured if captured is not None else last_face_emb
+        if use is None:
+            cap.release()
+            if grabbed == 0:
+                emit({"e": "error", "msg": "camera delivered no frames (check the webcam)"})
+            else:
+                emit({"e": "error", "msg": "no face detected — please face the camera"})
+            return
+        embeddings.append(use)
+        emit({"e": "progress", "count": len(embeddings), "total": TOTAL_POSES})
+
+    cap.release()
+    avg = l2n(np.mean(np.vstack(embeddings), axis=0).astype(np.float32))
+    user_id = insert_user(name, avg)
+    emit({"e": "enrolled", "name": name, "user_id": int(user_id), "frames": grabbed})
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        emit({"e": "error", "msg": f"{type(e).__name__}: {e}"})

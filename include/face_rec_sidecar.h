@@ -44,6 +44,10 @@ class FaceRecSidecar : public QObject {
     Q_PROPERTY(QString stage         READ stage         NOTIFY stageChanged)
     Q_PROPERTY(int     blinkCount    READ blinkCount    NOTIFY stageChanged)
     Q_PROPERTY(int     blinkRequired READ blinkRequired NOTIFY stageChanged)
+    // Enrollment progress for the registration page: poses captured so far
+    // (enrollCount) out of enrollTotal (3). Drives the "N / 3" label + arc.
+    Q_PROPERTY(int     enrollCount   READ enrollCount   NOTIFY enrollProgressChanged)
+    Q_PROPERTY(int     enrollTotal   READ enrollTotal   NOTIFY enrollProgressChanged)
 
 public:
     explicit FaceRecSidecar(QObject *parent = nullptr);
@@ -56,6 +60,8 @@ public:
     QString stage()         const { return m_stage; }
     int     blinkCount()    const { return m_blinkCount; }
     int     blinkRequired() const { return m_blinkRequired; }
+    int     enrollCount()   const { return m_enrollCount; }
+    int     enrollTotal()   const { return m_enrollTotal; }
 
 public slots:
     Q_INVOKABLE void identify();
@@ -70,6 +76,7 @@ signals:
     void runningChanged();
     void statusChanged();
     void stageChanged();
+    void enrollProgressChanged();
     void identified(const QString &name, double score);
     void unknown(double bestScore);
     void enrolled(const QString &name);
@@ -94,6 +101,8 @@ private:
     QString            m_stage;           // current liveness stage
     int                m_blinkCount    = 0;
     int                m_blinkRequired = 2;
+    int                m_enrollCount   = 0;   // poses captured during enrollment
+    int                m_enrollTotal   = 3;   // poses required
     quint64            m_framesSent    = 0;   // diagnostic — frames pushed to Python
 };
 

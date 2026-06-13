@@ -153,9 +153,24 @@ void FaceRecSidecar::enroll(const QString &name)
     if (isRunning()) return;
     m_currentMode = QStringLiteral("enroll");
     m_pendingName = name;
-    setStatus(tr("Enrolling %1…").arg(name));
+    m_enrollCount = 0;
+    m_enrollTotal = 3;
+    m_stage.clear();
+    emit enrollProgressChanged();
+    emit stageChanged();
+    setStatus(tr("Look at the camera…"));
+    // Module choice mirrors identify():
+    //   Windows → scripts.enroll_user          (mediapipe + cv2 window — dev only)
+    //   Linux   → scripts.enroll_selfcam        (OpenCV YuNet + ArcFace; the sidecar
+    //             OPENS THE CAMERA ITSELF, auto-advances 3 poses with NO screen
+    //             press, writes the live preview to /tmp/rewingo_face.jpg, and
+    //             stores the embedding in the SAME faces.db that login reads)
+#ifdef Q_OS_WIN
     startSidecar({ "-u", "-m", "scripts.enroll_user" });
-    // enroll_user.py reads the user's name from stdin
+#else
+    startSidecar({ "-u", "-m", "scripts.enroll_selfcam" });
+#endif
+    // Both scripts read the user's name from the first stdin line.
     if (m_proc) m_proc->write((name + "\n").toUtf8());
 }
 
@@ -203,6 +218,12 @@ void FaceRecSidecar::onStdout()
             m_stage         = obj.value("stage").toString();
             m_blinkCount    = obj.value("count").toInt(m_blinkCount);
             m_blinkRequired = obj.value("required").toInt(m_blinkRequired);
+            // Enrollment pose stages carry count/total too → drive the N/3 arc.
+            if (obj.contains("total")) {
+                m_enrollTotal = obj.value("total").toInt(m_enrollTotal);
+                m_enrollCount = obj.value("count").toInt(m_enrollCount);
+                emit enrollProgressChanged();
+            }
             emit stageChanged();
 
             // Human-readable status mirroring the stage for the page footer.
@@ -211,6 +232,17 @@ void FaceRecSidecar::onStdout()
             else if (m_stage == "TURN_RIGHT") setStatus(tr("Turn your head RIGHT"));
             else if (m_stage == "TURN_LEFT")  setStatus(tr("Turn your head LEFT"));
             else if (m_stage == "RECOGNIZE")  setStatus(tr("Hold still — recognising…"));
+            else if (m_stage == "FRONT")      setStatus(tr("Look straight at the camera"));
+            else if (m_stage == "LEFT")       setStatus(tr("Slowly turn your head LEFT"));
+            else if (m_stage == "RIGHT")      setStatus(tr("Slowly turn your head RIGHT"));
+        }
+        else if (ev == "progress") {
+            m_enrollCount = obj.value("count").toInt(m_enrollCount);
+            m_enrollTotal = obj.value("total").toInt(m_enrollTotal);
+            emit enrollProgressChanged();
+        }
+        else if (ev == "enrolled") {
+            emit enrolled(obj.value("name").toString());
         }
         else if (ev == "identified") {
             emit identified(obj.value("name").toString(),

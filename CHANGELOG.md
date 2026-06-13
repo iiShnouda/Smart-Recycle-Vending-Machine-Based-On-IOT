@@ -5,6 +5,26 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-06-13
+
+### Face registration — rebuilt to actually work on the kiosk
+- **Self-capture enrollment.** Registration used QtMultimedia (`Camera` +
+  `feedFrame`) to show the face and capture frames — the exact path that stalls
+  on the Pi, so the page showed nothing and never captured ("can't register").
+  And it stored embeddings in the C++ DB, which **login never reads**, so even a
+  successful enroll wouldn't be recognised. Registration now runs the new
+  **`scripts.enroll_selfcam`** sidecar, which opens the camera itself (V4L2 +
+  warm-up), **auto-advances 3 head poses with NO screen press**, writes the live
+  preview, and stores the averaged ArcFace embedding in the **same `faces.db`
+  that login reads** — so a newly registered face is recognised next visit.
+  Verified end-to-end on the Pi (FRONT→LEFT→RIGHT → `enrolled`).
+- **Round preview + outside ring + N/3.** `FaceEnrollPage` no longer uses
+  QtMultimedia. The face shows in a **true circle** (a Canvas paints the page
+  background over the square frame's corners — the old `radius + clip` only
+  clipped to a square), the **progress ring sits outside** the face circle, and
+  the counter reads **"N / 3"** (was "/ 5"). `FaceRec` gained `enrollCount` /
+  `enrollTotal` + parses the sidecar's `stage`/`progress`/`enrolled` events.
+
 ## [0.7.0] — 2026-06-13
 
 ### Fixed

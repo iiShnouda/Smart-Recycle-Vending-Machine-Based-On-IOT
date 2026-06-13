@@ -1,13 +1,16 @@
 import QtQuick
 import QtQuick.Controls
-import QtMultimedia
 import Recycle_Vending_Machine_LCD
 
 /*
- * FaceEnrollPage — captures 5 face frames via the Pi camera and asks
- * FaceService to compute + store the embedding.
+ * FaceEnrollPage — self-capture face registration.
  *
- * Visual: round camera preview ringed by a progress arc (0 → 5 steps).
+ * The Python sidecar (scripts.enroll_selfcam) opens the camera itself, auto-
+ * advances through 3 head poses with NO screen press, writes a live preview to
+ * /tmp/rewingo_face.jpg, and stores the embedding in the same faces.db login
+ * reads. This page shows that preview inside a TRUE circle (a Canvas "donut"
+ * paints the page background over the square image's corners) with the progress
+ * ring OUTSIDE the circle, counting captured poses N / 3.
  */
 Rectangle {
     id: page
@@ -15,60 +18,51 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    // Temp user info — admin can fill in a real name on RegistrationCompletePage
+    // Temp identity — a real name can be set later on the complete page.
     property string newUserId:   "u_" + Date.now()
     property string newUserName: "New User"
 
     property int langTick: 0
+    property int previewTick: 0
     Connections {
         target: appManager
         function onLanguageChanged() { langTick++ }
     }
 
-    Component.onCompleted: FaceService.startEnrollment(newUserId, newUserName)
-    Component.onDestruction: FaceService.cancel()
+    Component.onCompleted: FaceRec.enroll(newUserName)
+    Component.onDestruction: FaceRec.cancel()
+    StackView.onDeactivated:  FaceRec.cancel()
 
-    // ──────── Camera ────────
-    CaptureSession {
-        id: cs
-        camera: Camera { id: cam; active: true }
-        videoOutput: videoOut
-    }
-
-    // Frame timer — grabs the latest video frame ~10× per second
-    // and feeds it to FaceService.
+    // Reload the preview frame the sidecar writes (~8 fps).
     Timer {
-        interval: 100
-        running: true
-        repeat: true
-        onTriggered: {
-            const img = videoOut.videoSink.videoFrame.toImage()
-            if (img && !img.isNull) FaceService.feedFrame(img)
-        }
+        interval: 120; running: true; repeat: true
+        onTriggered: page.previewTick++
     }
 
     Connections {
-        target: FaceService
-        function onEnrollSucceeded(uid) {
+        target: FaceRec
+        function onEnrolled(name) {
             stackView.replace(
                 "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
-                { userId: uid })
+                { userId: page.newUserId })
         }
-        function onEnrollFailed(reason) {
-            errorBanner.text = qsTr("Failed: ") + reason
+        function onFailed(reason) {
+            errorBanner.text = qsTr("Couldn't register: ") + reason
         }
+        function onEnrollProgressChanged() { arc.requestPaint() }
     }
 
-    // ──────── UI ────────
+    // ──────── Back ────────
     Rectangle {
         anchors.top: parent.top; anchors.left: parent.left
         anchors.topMargin: 30; anchors.leftMargin: 30
-        width: 90; height: 90; radius: 45
+        width: 90; height: 90; radius: 45; z: 10
         color: "#FFFFFF"; border.width: 2; border.color: "#D8E0CF"
         TapHandler { onTapped: stackView.pop() }
         Text { anchors.centerIn: parent; text: "←"; font.pixelSize: 36; color: "#1F2A1B" }
     }
 
+    // ──────── Title ────────
     Column {
         anchors.top: parent.top
         anchors.topMargin: 60
@@ -80,84 +74,123 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
         }
         Text {
-            text: { langTick; return qsTr("Look at the camera and stay still") }
-            color: "#5A6B52"; font.pixelSize: 20
+            text: { langTick; return FaceRec.status.length > 0
+                                      ? FaceRec.status
+                                      : qsTr("Look at the camera and stay still") }
+            color: "#5A6B52"; font.pixelSize: 22
             anchors.horizontalCenter: parent.horizontalCenter
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 
-    // Round camera preview with progress arc
+    // ──────── Round preview + progress ring (ring OUTSIDE the face) ────────
     Item {
         id: ringWrap
         anchors.centerIn: parent
-        width: 520; height: 520
+        width: 560; height: 560
 
-        // Progress arc (Canvas)
+        property real ringR: width / 2 - 16   // progress ring radius (outer)
+        property real faceR: width / 2 - 78    // face circle radius (inner, smaller)
+
+        // Progress arc — drawn at the OUTER radius so it rings the face.
         Canvas {
             id: arc
             anchors.fill: parent
-            property int progress: FaceService.enrollProgress
-            property int total:    FaceService.enrollTotal
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
-                const cx = width/2, cy = height/2
-                const r  = Math.min(width, height)/2 - 18
+                const cx = width / 2, cy = height / 2, r = ringWrap.ringR
                 // background ring
                 ctx.beginPath()
-                ctx.arc(cx, cy, r, 0, 2*Math.PI)
-                ctx.lineWidth   = 16
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI)
+                ctx.lineWidth = 18
                 ctx.strokeStyle = "#D8E0CF"
                 ctx.stroke()
-                // foreground arc
-                const start = -Math.PI/2
-                const end   = start + (2*Math.PI) * (progress / total)
-                ctx.beginPath()
-                ctx.arc(cx, cy, r, start, end)
-                ctx.lineWidth   = 16
-                ctx.strokeStyle = "#0891B2"
-                ctx.lineCap     = "round"
-                ctx.stroke()
+                // foreground progress
+                const total = Math.max(1, FaceRec.enrollTotal)
+                const frac  = Math.max(0, Math.min(1, FaceRec.enrollCount / total))
+                if (frac > 0) {
+                    const start = -Math.PI / 2
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, start, start + 2 * Math.PI * frac)
+                    ctx.lineWidth = 18
+                    ctx.strokeStyle = "#0891B2"
+                    ctx.lineCap = "round"
+                    ctx.stroke()
+                }
             }
             Connections {
-                target: FaceService
-                function onProgressChanged() { arc.requestPaint() }
+                target: FaceRec
+                function onEnrollProgressChanged() { arc.requestPaint() }
             }
         }
 
-        // Round video — clipped to a circle by a Rectangle with circular mask
-        Rectangle {
+        // The round face preview.
+        Item {
             anchors.centerIn: parent
-            width: parent.width - 60
-            height: parent.height - 60
-            radius: width / 2
-            color: "#1A1D1A"
-            clip: true
-            VideoOutput {
-                id: videoOut
+            width: ringWrap.faceR * 2
+            height: ringWrap.faceR * 2
+
+            // Dark disc shown until the first frame arrives.
+            Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
+
+            // Square camera frame…
+            Image {
+                id: faceImg
                 anchors.fill: parent
-                fillMode: VideoOutput.PreserveAspectCrop
+                fillMode: Image.PreserveAspectCrop
+                cache: false
+                asynchronous: true
+                source: "file:///tmp/rewingo_face.jpg?t=" + previewTick
             }
+
+            // …turned into a CIRCLE: paint the page background over the corners
+            // (even-odd rect minus circle). No GraphicalEffects module needed.
+            Canvas {
+                anchors.fill: parent
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.fillStyle = page.color
+                    ctx.beginPath()
+                    ctx.rect(0, 0, width, height)
+                    ctx.arc(width / 2, height / 2, width / 2, 0, 2 * Math.PI, true)
+                    ctx.fill("evenodd")
+                }
+            }
+        }
+
+        // Spinner until the first preview frame is ready.
+        BusyIndicator {
+            anchors.centerIn: parent
+            running: faceImg.status !== Image.Ready
         }
     }
 
+    // ──────── Count + error ────────
     Column {
         anchors.top: ringWrap.bottom
-        anchors.topMargin: 30
+        anchors.topMargin: 26
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 10
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: { langTick;
-                    return FaceService.enrollProgress + " / "
-                         + FaceService.enrollTotal + "  " + qsTr("captured") }
-            color: "#1F2A1B"; font.pixelSize: 24; font.weight: Font.ExtraBold
+            text: FaceRec.enrollCount + " / " + FaceRec.enrollTotal
+            color: "#1F2A1B"; font.pixelSize: 30; font.weight: Font.Black
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: { langTick; return qsTr("poses captured") }
+            color: "#5A6B52"; font.pixelSize: 18
         }
         Text {
             id: errorBanner
             anchors.horizontalCenter: parent.horizontalCenter
             text: ""
             color: "#DC2626"; font.pixelSize: 16
+            horizontalAlignment: Text.AlignHCenter
+            width: page.width * 0.8
+            wrapMode: Text.WordWrap
         }
     }
 }
