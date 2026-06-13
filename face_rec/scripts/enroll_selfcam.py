@@ -18,12 +18,13 @@ Line-JSON protocol (one object per line):
 
 DEPLOY: copy to /opt/face_rec/scripts/enroll_selfcam.py on the Pi.
 """
-import sys, os, json, time
+import sys, os, json, time, subprocess, threading
 from pathlib import Path
 import cv2
 import numpy as np
 import onnxruntime as ort
 from app.db_utils import init_db, insert_user
+from scripts.voice import speak
 
 MODEL_PATH   = Path("models") / "arcface.onnx"
 YUNET_PATH   = Path("models") / "face_detection_yunet_2023mar.onnx"
@@ -31,6 +32,9 @@ CAM_INDEX    = int(os.environ.get("FACE_CAM_INDEX", "0"))      # 0 = /dev/video0
 PREVIEW_PATH = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
 TOTAL_POSES  = 3
 STEP_TIMEOUT = float(os.environ.get("ENROLL_STEP_SEC", "7"))   # per-pose cap
+# Detection is the slow part on the Pi CPU. Run it only every Nth frame so the
+# preview (written every frame) stays smooth, and embed only ONCE per pose.
+DETECT_EVERY = int(os.environ.get("FACE_DETECT_EVERY", "2"))
 
 
 def emit(o):
@@ -119,24 +123,29 @@ def main():
     # doesn't turn enough within STEP_TIMEOUT we still capture the last good
     # face, so enrollment always completes (no screen press, no getting stuck).
     poses = [
-        ("FRONT", lambda y: abs(y) < 0.12),
-        ("LEFT",  lambda y: y <= -0.13),
-        ("RIGHT", lambda y: y >= 0.13),
+        ("FRONT", "Look straight at the camera",          lambda y: abs(y) < 0.12),
+        ("LEFT",  "Please turn your head to the left",    lambda y: y <= -0.13),
+        ("RIGHT", "Please turn your head to the right",   lambda y: y >= 0.13),
     ]
 
     embeddings = []
     grabbed = 0
-    for idx, (label, pred) in enumerate(poses):
+    fi = 0
+    for idx, (label, prompt, pred) in enumerate(poses):
         emit({"e": "stage", "stage": label, "count": idx, "total": TOTAL_POSES})
+        speak(prompt)
         t_end = time.time() + STEP_TIMEOUT
-        captured = None
-        last_face_emb = None
+        captured_crop = None
+        last_crop = None
         while time.time() < t_end:
             ok, fr = cap.read()
             if not ok or fr is None:
                 continue
             grabbed += 1
-            write_preview(fr)
+            write_preview(fr)              # EVERY frame → smooth preview
+            fi += 1
+            if fi % DETECT_EVERY != 0:     # throttle the slow detection
+                continue
             H, W = fr.shape[:2]
             det.setInputSize((W, H))
             _, faces = det.detect(fr)
@@ -148,24 +157,27 @@ def main():
             x2, y2 = min(W, x + bw), min(H, y + bh)
             if x2 <= x1 or y2 <= y1:
                 continue
-            last_face_emb = embed(fr[y1:y2, x1:x2])
+            last_crop = fr[y1:y2, x1:x2].copy()
             if pred(yaw_of(b)):
-                captured = last_face_emb
+                captured_crop = last_crop
                 break
-        use = captured if captured is not None else last_face_emb
-        if use is None:
+        # Embed ONLY ONCE per pose (ArcFace is the expensive bit) — not every
+        # frame, which is what made registration crawl at ~2 fps.
+        use_crop = captured_crop if captured_crop is not None else last_crop
+        if use_crop is None:
             cap.release()
             if grabbed == 0:
                 emit({"e": "error", "msg": "camera delivered no frames (check the webcam)"})
             else:
                 emit({"e": "error", "msg": "no face detected — please face the camera"})
             return
-        embeddings.append(use)
+        embeddings.append(embed(use_crop))
         emit({"e": "progress", "count": len(embeddings), "total": TOTAL_POSES})
 
     cap.release()
     avg = l2n(np.mean(np.vstack(embeddings), axis=0).astype(np.float32))
     user_id = insert_user(name, avg)
+    speak("All done " + name + ". You can now use face login.")
     emit({"e": "enrolled", "name": name, "user_id": int(user_id), "frames": grabbed})
 
 

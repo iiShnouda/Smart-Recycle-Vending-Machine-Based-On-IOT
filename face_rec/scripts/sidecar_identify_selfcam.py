@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 from app.db_utils import load_users
+from scripts.voice import speak
 
 MODEL_PATH = Path("models") / "arcface.onnx"
 YUNET_PATH = Path("models") / "face_detection_yunet_2023mar.onnx"
@@ -27,6 +28,11 @@ THRESHOLD       = 0.55
 RECOGNITION_SEC = float(os.environ.get("FACE_SECONDS", "8"))
 CAM_INDEX       = int(os.environ.get("FACE_CAM_INDEX", "0"))   # 0 = /dev/video0 (C270)
 PREVIEW_PATH    = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
+# Detection + embedding is the slow part. Run it only every Nth frame so the
+# preview (written every frame) stays smooth, and stop the moment we have a
+# confident match so login is fast instead of always running the full window.
+DETECT_EVERY    = int(os.environ.get("FACE_DETECT_EVERY", "2"))
+CONFIRM_HITS    = int(os.environ.get("FACE_CONFIRM_HITS", "2"))
 
 
 def emit(o):
@@ -102,18 +108,7 @@ def main():
             img = np.transpose(img, (2, 0, 1))
         return l2n(sess.run(None, {iname: np.expand_dims(img, 0)})[0][0].astype(np.float32))
 
-    emit({"e": "stage", "stage": "RECOGNIZE", "seconds": RECOGNITION_SEC})
-    best_name, best_score, seen, grabbed = "UNKNOWN", -1.0, 0, 0
-    t_end = time.time() + RECOGNITION_SEC
-    while time.time() < t_end:
-        fr = grab(kind, h)
-        if fr is None:
-            continue
-        grabbed += 1
-        # Write a live preview frame for the kiosk UI. Encode to JPEG in memory
-        # (cv2.imwrite picks the codec from the file EXTENSION — writing to a
-        # "*.tmp" name made it fail silently, so the preview never appeared),
-        # then atomically rename so the QML Image never reads a half-written file.
+    def write_preview(fr):
         try:
             ok_enc, buf = cv2.imencode(".jpg", cv2.resize(fr, (480, 360)),
                                        [cv2.IMWRITE_JPEG_QUALITY, 70])
@@ -124,6 +119,22 @@ def main():
                 os.replace(_tmp, PREVIEW_PATH)
         except Exception:
             pass
+
+    emit({"e": "stage", "stage": "RECOGNIZE", "seconds": RECOGNITION_SEC})
+    speak("Please look at the camera")
+    best_name, best_score, seen, grabbed = "UNKNOWN", -1.0, 0, 0
+    hits, last_hit = 0, None
+    fi = 0
+    t_end = time.time() + RECOGNITION_SEC
+    while time.time() < t_end:
+        fr = grab(kind, h)
+        if fr is None:
+            continue
+        grabbed += 1
+        write_preview(fr)                  # EVERY frame → smooth preview
+        fi += 1
+        if fi % DETECT_EVERY != 0:         # throttle the slow detect + embed
+            continue
         H, W = fr.shape[:2]
         det.setInputSize((W, H))
         _, faces = det.detect(fr)
@@ -137,10 +148,23 @@ def main():
             continue
         seen += 1
         emb = embed(fr[y1:y2, x1:x2])
+        fr_name, fr_score = "UNKNOWN", -1.0
         for _u, nm, dbe in users:
             s = cosine(emb, dbe)
-            if s > best_score:
-                best_score, best_name = s, nm
+            if s > fr_score:
+                fr_score, fr_name = s, nm
+        if fr_score > best_score:
+            best_score, best_name = fr_score, fr_name
+        # Early exit: a couple of confident frames of the SAME person is enough
+        # — don't make a registered user wait out the whole window.
+        if fr_score >= THRESHOLD:
+            hits = hits + 1 if fr_name == last_hit else 1
+            last_hit = fr_name
+            if hits >= CONFIRM_HITS:
+                best_name, best_score = fr_name, fr_score
+                break
+        else:
+            hits, last_hit = 0, None
 
     try:
         h.stop() if kind == "picam" else h.release()
@@ -155,6 +179,7 @@ def main():
         return
 
     if best_score >= THRESHOLD:
+        speak("Welcome " + best_name)
         emit({"e": "identified", "name": best_name, "score": round(best_score, 3),
               "frames": seen, "grabbed": grabbed})
     else:
