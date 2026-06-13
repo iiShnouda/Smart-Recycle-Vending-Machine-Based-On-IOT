@@ -38,11 +38,26 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   instead of hanging — the cause of "scanned the machine code but nothing
   happened on the LCD".
 
-### Known hardware issue
-- **Face recognition needs the USB camera physically connected.** On the current
-  Pi, `lsusb` shows no webcam and there is no `/dev/video0` (only the Pi's
-  internal codec/ISP nodes `video10`–`video23`). The recogniser has no camera to
-  open. Check the camera's cable/port/power — this is not a software fault.
+### Face recognition
+- **Reliable camera open + live preview.** With the Logitech C270 reconnected,
+  the self-capture sidecar now opens it via the **V4L2 backend** (the default
+  backend sometimes selected GStreamer and delivered zero frames), **warms the
+  camera up** for up to 2 s (the first UVC grabs after open fail while it powers
+  on — the real cause of the `frames:0` stalls), and drops the Picamera2 path
+  (that's for CSI cameras and isn't installed). Verified on the Pi: 69 frames
+  grabbed in an 8 s window.
+- **Live preview actually renders now.** The preview frame was written with
+  `cv2.imwrite("…​.tmp", …)`, but OpenCV picks its codec from the file extension
+  and silently failed on `.tmp`, so `FaceDetectionPage` never showed the camera.
+  It now JPEG-encodes in memory and atomically renames a real image into place.
+- The sidecar reports `grabbed` (raw frames) alongside `frames` (faces seen) and
+  emits an explicit **`camera delivered no frames`** error, so a dead/unplugged
+  camera is distinguishable from "face not recognised" instead of silently
+  routing to registration.
+
+  Note: if face login ever sits on the scan screen again, first check `lsusb`
+  shows the `Logitech … C270` and that `/dev/video0` exists — a loose USB cable
+  removes the camera entirely (there is no `/dev/video0` without it).
 
 ## [0.6.0] — 2026-06-12
 

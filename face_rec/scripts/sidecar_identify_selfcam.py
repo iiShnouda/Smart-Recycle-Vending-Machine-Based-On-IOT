@@ -25,7 +25,7 @@ MODEL_PATH = Path("models") / "arcface.onnx"
 YUNET_PATH = Path("models") / "face_detection_yunet_2023mar.onnx"
 THRESHOLD       = 0.55
 RECOGNITION_SEC = float(os.environ.get("FACE_SECONDS", "8"))
-CAM_INDEX       = int(os.environ.get("FACE_CAM_INDEX", "1"))   # 1 = Logitech
+CAM_INDEX       = int(os.environ.get("FACE_CAM_INDEX", "0"))   # 0 = /dev/video0 (C270)
 PREVIEW_PATH    = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
 
 
@@ -39,18 +39,33 @@ def cosine(a, b): return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.nor
 
 
 def open_camera():
-    """Return (kind, handle). Prefer Picamera2 (works for the UVC + CSI cams
-    on this Pi); fall back to cv2.VideoCapture."""
-    try:
-        from picamera2 import Picamera2
-        p = Picamera2(CAM_INDEX)
-        p.configure(p.create_preview_configuration(
-            main={"format": "RGB888", "size": (640, 480)}))
-        p.start(); time.sleep(0.4)
-        return ("picam", p)
-    except Exception:
-        cap = cv2.VideoCapture(0)
-        return ("cv2", cap) if cap.isOpened() else (None, None)
+    """Open the UVC webcam (Logitech C270 = /dev/video0) reliably and return
+    (kind, handle) or (None, None).
+
+    The V4L2 backend is the dependable path on this Pi — the default backend
+    sometimes selects GStreamer and then delivers zero frames. We do NOT use
+    Picamera2: it targets CSI/libcamera cameras (not UVC) and isn't installed
+    here, so trying it first just wasted time. Finally we warm the camera up:
+    the first grabs after opening a UVC cam fail while it powers up / negotiates
+    the stream, and starting the recognise loop against a cold camera was why a
+    run could report frames:0."""
+    cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(CAM_INDEX)        # last-resort default backend
+    if not cap.isOpened():
+        return (None, None)
+    # MJPG @ 640x480 is well supported by the C270 and keeps USB bandwidth low.
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    # Warm-up: discard failed/black frames for up to 2 s until one reads OK.
+    t0 = time.time()
+    while time.time() - t0 < 2.0:
+        ok, _ = cap.read()
+        if ok:
+            break
+        time.sleep(0.05)
+    return ("cv2", cap)
 
 
 def grab(kind, h):
@@ -88,19 +103,25 @@ def main():
         return l2n(sess.run(None, {iname: np.expand_dims(img, 0)})[0][0].astype(np.float32))
 
     emit({"e": "stage", "stage": "RECOGNIZE", "seconds": RECOGNITION_SEC})
-    best_name, best_score, seen = "UNKNOWN", -1.0, 0
+    best_name, best_score, seen, grabbed = "UNKNOWN", -1.0, 0, 0
     t_end = time.time() + RECOGNITION_SEC
     while time.time() < t_end:
         fr = grab(kind, h)
         if fr is None:
             continue
-        # Write a live preview frame for the kiosk UI. Atomic rename so the
-        # QML Image never reads a half-written file.
+        grabbed += 1
+        # Write a live preview frame for the kiosk UI. Encode to JPEG in memory
+        # (cv2.imwrite picks the codec from the file EXTENSION — writing to a
+        # "*.tmp" name made it fail silently, so the preview never appeared),
+        # then atomically rename so the QML Image never reads a half-written file.
         try:
-            _tmp = PREVIEW_PATH + ".tmp"
-            cv2.imwrite(_tmp, cv2.resize(fr, (480, 360)),
-                        [cv2.IMWRITE_JPEG_QUALITY, 70])
-            os.replace(_tmp, PREVIEW_PATH)
+            ok_enc, buf = cv2.imencode(".jpg", cv2.resize(fr, (480, 360)),
+                                       [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok_enc:
+                _tmp = PREVIEW_PATH + ".tmp"
+                with open(_tmp, "wb") as _pf:
+                    _pf.write(buf.tobytes())
+                os.replace(_tmp, PREVIEW_PATH)
         except Exception:
             pass
         H, W = fr.shape[:2]
@@ -126,11 +147,19 @@ def main():
     except Exception:
         pass
 
+    # No raw frames at all → the camera is the problem (unplugged, busy, or it
+    # never warmed up), NOT "face not recognised". Report it so the kiosk can
+    # say so instead of silently routing to registration.
+    if grabbed == 0:
+        emit({"e": "error", "msg": "camera delivered no frames (check the webcam)"})
+        return
+
     if best_score >= THRESHOLD:
-        emit({"e": "identified", "name": best_name, "score": round(best_score, 3), "frames": seen})
+        emit({"e": "identified", "name": best_name, "score": round(best_score, 3),
+              "frames": seen, "grabbed": grabbed})
     else:
         emit({"e": "unknown", "best": best_name, "score": round(best_score, 3),
-              "threshold": THRESHOLD, "frames": seen})
+              "threshold": THRESHOLD, "frames": seen, "grabbed": grabbed})
 
 
 if __name__ == "__main__":
