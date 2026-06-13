@@ -12,7 +12,7 @@ Rectangle {
 
     // User info — wire from your auth flow
     property string userName: "Shnouda"
-    property int userPoints: 10000
+    property int userPoints: 0
 
     property int langTick: 0
     Connections {

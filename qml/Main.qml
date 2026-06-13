@@ -22,8 +22,8 @@ Window {
     // and comment out the Windowed line.
 
     //flags: Qt.Window           // explicit chrome
-    visibility: Window.FullScreen        // ← deploy mode
-    flags: Qt.FramelessWindowHint | Qt.Window
+    //visibility: Window.FullScreen        // ← deploy mode
+    //flags: Qt.FramelessWindowHint | Qt.Window
 
     Rectangle {
         anchors.fill: parent
@@ -37,7 +37,7 @@ Window {
         id: mainStackView
         objectName: "mainStackView"
         anchors.fill: parent
-        initialItem: sleepModeComponent
+        initialItem: startPageComponent
 
         // ── Morph transitions (cross-fade + scale, Material "shared-axis Z") ──
         // The incoming page grows in from slightly small while the outgoing
@@ -74,7 +74,7 @@ Window {
     }
 
     // ===== Idle timer hook =====
-    // When 60 s of inactivity passes, pop all the way back to SleepMode.
+    // When 60 s of inactivity passes, pop all the way back to the StartPage.
     Connections {
         target: Idle
         function onTimedOut() {
@@ -127,5 +127,5 @@ Window {
         visible: !keyboard.active   // hide when keyboard is up
     }
 
-    Component { id: sleepModeComponent; SleepMode {} }
+    Component { id: startPageComponent; StartPage {} }
 }

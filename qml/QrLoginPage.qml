@@ -20,7 +20,7 @@ Rectangle {
     Timer { interval: 400; running: true; repeat: true; onTriggered: page.previewTick++ }
 
     // 1-minute timeout — if nobody scans, the token dies and we go all the way
-    // back to the START screen (SleepMode at the stack root), not just one page
+    // back to the START screen (StartPage at the stack root), not just one page
     // back. Mirrors the idle-timeout behaviour in Main.qml.
     Timer {
         interval: 60000; running: true; repeat: false

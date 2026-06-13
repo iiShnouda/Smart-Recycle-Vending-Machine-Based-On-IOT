@@ -5,12 +5,21 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — 2026-06-14
+
+### Changed
+- **Renamed `SleepMode` → `StartPage`.** The attract/"press to start" screen is
+  now `qml/StartPage.qml` (objectName `startPage`), and every reference is wired
+  through: `Main.qml` (`startPageComponent` as the StackView's initialItem), the
+  CMake QML module list, and the comments in `QrLoginPage`, `VendingPage`, and
+  `IdleManager`. No behaviour change — clearer naming.
+
 ## [0.10.0] — 2026-06-14
 
 ### Fixed
 - **QR sign-in timeout returns to the START screen.** When the 1-minute QR timer
-  expired it only popped one page back; now it pops all the way to SleepMode
-  (the stack root), matching the idle-timeout behaviour.
+  expired it only popped one page back; now it pops all the way to the start
+  screen (the stack root), matching the idle-timeout behaviour.
 - **Update button — bulletproof install + clear feedback.** The `.deb` now always
   downloads to `/tmp` (the only path the sudoers rule permits `dpkg -i` on, so a
   per-user temp dir can't cause a silent sudo denial). If the helper script is

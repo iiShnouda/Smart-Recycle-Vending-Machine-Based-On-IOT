@@ -129,7 +129,7 @@ Rectangle {
             width: 90; height: 90; radius: 45
             color: "#FFFFFF"
             TapHandler {
-                // Back to MainPage, NOT all the way to SleepMode.
+                // Back to MainPage, NOT all the way to the StartPage.
                 onTapped: { Idle.touch(); stackView.pop() }
             }
             Text { anchors.centerIn: parent; text: "←"

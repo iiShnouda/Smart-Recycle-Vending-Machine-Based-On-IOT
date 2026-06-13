@@ -14,7 +14,7 @@
  *   - any TapHandler / sensor event      (user did something)
  *
  * One global QTimer counts down. When it fires, the QML root pops back
- * to the sleep mode. Admin panels call disable() to opt out of the
+ * to the start page. Admin panels call disable() to opt out of the
  * timeout, then enable() when they leave.
  *
  * QML: `Idle.touch()` to reset, `Idle.disable()` for admin pages.

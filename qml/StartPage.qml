@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Controls
 
 Item {
-    id: sleep
-    objectName: "sleepMode"
+    id: startPage
+    objectName: "startPage"
 
     property StackView stackView: StackView.view
 
