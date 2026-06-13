@@ -93,13 +93,15 @@ def main():
     if not MODEL_PATH.exists():
         emit({"e": "error", "msg": "arcface.onnx not found"}); return
 
-    # Name from the first stdin line (kiosk writes it). Fall back gracefully.
+    # First stdin line is "name<TAB>mobile" (mobile optional) — the kiosk
+    # writes it. Fall back gracefully.
     try:
-        name = sys.stdin.readline().strip()
+        raw = sys.stdin.readline().strip()
     except Exception:
-        name = ""
-    if not name:
-        name = "New User"
+        raw = ""
+    parts = raw.split("\t")
+    name  = parts[0].strip() if parts and parts[0].strip() else "New User"
+    phone = parts[1].strip() if len(parts) > 1 else ""
 
     init_db()
     det = cv2.FaceDetectorYN.create(str(YUNET_PATH), "", (320, 320),
@@ -176,9 +178,15 @@ def main():
 
     cap.release()
     avg = l2n(np.mean(np.vstack(embeddings), axis=0).astype(np.float32))
-    user_id = insert_user(name, avg)
+    # Store with the phone number if db_utils supports it; fall back to the
+    # name-only signature on older deployments.
+    try:
+        user_id = insert_user(name, avg, phone)
+    except TypeError:
+        user_id = insert_user(name, avg)
     speak("All done " + name + ". You can now use face login.")
-    emit({"e": "enrolled", "name": name, "user_id": int(user_id), "frames": grabbed})
+    emit({"e": "enrolled", "name": name, "user_id": int(user_id),
+          "phone": phone, "frames": grabbed})
 
 
 if __name__ == "__main__":

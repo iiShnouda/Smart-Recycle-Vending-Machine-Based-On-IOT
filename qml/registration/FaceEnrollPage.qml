@@ -18,9 +18,10 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    // Temp identity — a real name can be set later on the complete page.
-    property string newUserId:   "u_" + Date.now()
-    property string newUserName: "New User"
+    // Identity collected on RegistrationDetailsPage.
+    property string newUserId:     "u_" + Date.now()
+    property string newUserName:   "New User"
+    property string newUserMobile: ""
 
     property int langTick: 0
     property int previewTick: 0
@@ -29,7 +30,11 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    Component.onCompleted: FaceRec.enroll(newUserName)
+    // The enroller reads the first stdin line as "name<TAB>mobile" (mobile
+    // optional). The C++ enroll(name) just forwards the string, so no C++
+    // change is needed to carry the number through.
+    Component.onCompleted: FaceRec.enroll(
+        newUserMobile.length > 0 ? newUserName + "\t" + newUserMobile : newUserName)
     Component.onDestruction: FaceRec.cancel()
     StackView.onDeactivated:  FaceRec.cancel()
 

@@ -132,7 +132,7 @@ Rectangle {
             color: "#1A1D1A"
             TapHandler {
                 onTapped: stackView.replace(
-                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationDetailsPage.qml")
             }
             Row {
                 anchors.centerIn: parent; spacing: 10

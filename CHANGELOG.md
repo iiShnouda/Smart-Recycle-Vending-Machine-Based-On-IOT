@@ -5,6 +5,22 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-06-13
+
+### Added
+- **Registration now asks for your name + mobile number.** A new
+  `RegistrationDetailsPage` (on-screen keyboard) collects the name and mobile
+  before the face scan, so login greets the real person ("Welcome <name>")
+  instead of "New User", and the mobile number is stored with the face record
+  (new `phone` column in `faces.db`) to key the phone-app account later. The
+  name+mobile is handed to the enroller as one `name<TAB>mobile` stdin line, so
+  the C++ `FaceRec.enroll()` signature is unchanged.
+
+### Notes
+- The face-rec **speed + voice** work (smooth preview, fast early-exit login,
+  piper voice prompts) ships in the Python sidecars under `/opt/face_rec` and is
+  already live on the kiosk — it isn't part of this `.deb`.
+
 ## [0.8.0] — 2026-06-13
 
 ### Face registration — rebuilt to actually work on the kiosk
