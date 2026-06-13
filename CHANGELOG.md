@@ -5,6 +5,45 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-06-13
+
+### Fixed
+- **The update button now reliably installs and restarts.** The self-update
+  helper (`rewingo-update-helper`) was aborting on a non-zero `dpkg` exit caused
+  by an *unrelated* pending `initramfs-tools` trigger on this Pi (it can't write
+  `/boot`) — our package installed fine, but `set -e` killed the script before
+  it relaunched the kiosk, so the screen went black and the update "didn't
+  work". The helper now: (1) drops `set -e`, (2) judges success by **reading the
+  installed version back** from the package DB rather than trusting dpkg's exit
+  code, (3) installs **before** killing the old process (replacing the on-disk
+  binary while it runs is safe) and lets the autostart loop relaunch the new
+  one, with a direct-launch fallback. `UpdateChecker` no longer self-quits 500 ms
+  after spawning the helper — that race let the autostart loop relaunch the OLD
+  binary mid-install. Proven end-to-end on the Pi (`RESULT:OK`).
+- **QR sign-in: the kiosk no longer shows a stale QR.** `MachineLink` deletes the
+  previous session's QR PNG *before* fetching the new one and retries the fetch,
+  so a network blip can never leave an old code (with an old token) on screen —
+  which the phone would echo back and the kiosk would silently reject. Every
+  received login is now logged with the session/token state, so a rejected
+  sign-in is diagnosable from the kiosk log instead of failing silently.
+
+### Mobile app (separate Flutter project)
+- **QR scanner no longer "approves" arbitrary codes.** It rejected nothing —
+  any QR (Wi-Fi, URL, contact card) fell through to the session-started screen.
+  Now only `REWINGO:<machineId>:<token>` codes are accepted; anything else keeps
+  the camera running with a hint to scan the code on the kiosk.
+- **Sign-in publish hardened.** The HiveMQ TLS publish now pins the system CA
+  store (`SecurityContext.defaultContext`) so the handshake doesn't fail
+  silently on some Android builds, with an 8 s connect timeout so it fails fast
+  instead of hanging — the cause of "scanned the machine code but nothing
+  happened on the LCD".
+
+### Known hardware issue
+- **Face recognition needs the USB camera physically connected.** On the current
+  Pi, `lsusb` shows no webcam and there is no `/dev/video0` (only the Pi's
+  internal codec/ISP nodes `video10`–`video23`). The recogniser has no camera to
+  open. Check the camera's cable/port/power — this is not a software fault.
+
 ## [0.6.0] — 2026-06-12
 
 ### Changed

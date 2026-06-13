@@ -7,7 +7,7 @@ import Recycle_Vending_Machine_LCD
 Window {
     id: window
     visible: true
-    visibility: Window.Windowed
+    //visibility: Window.Windowed
     // Production display: 15.6" LCD in portrait → 1080 × 1920
     width: 1080
     height: 1500
@@ -22,8 +22,8 @@ Window {
     // and comment out the Windowed line.
 
     //flags: Qt.Window           // explicit chrome
-    // visibility: Window.FullScreen        // ← deploy mode
-    // flags: Qt.FramelessWindowHint | Qt.Window
+    visibility: Window.FullScreen        // ← deploy mode
+    flags: Qt.FramelessWindowHint | Qt.Window
 
     Rectangle {
         anchors.fill: parent

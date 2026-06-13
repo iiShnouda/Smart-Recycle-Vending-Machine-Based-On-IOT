@@ -9,7 +9,12 @@
 #include <QJsonObject>
 #include <QStandardPaths>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QTimer>
+
+#include <functional>
+#include <memory>
 
 MachineLink *MachineLink::s_instance = nullptr;
 
@@ -68,15 +73,37 @@ void MachineLink::cancel()
 
 void MachineLink::handleLogin(const QString &payload)
 {
-    if (!m_sessionActive) return;          // only while the QR screen is up
+    // Log every login the broker delivers, with the gate state, so a failed
+    // sign-in is diagnosable from the kiosk log instead of failing silently.
+    Logger::info("MachineLink",
+                 QString("login received (sessionActive=%1, haveToken=%2): %3")
+                     .arg(m_sessionActive)
+                     .arg(!m_token.isEmpty())
+                     .arg(payload));
+
+    if (!m_sessionActive) {                // only while the QR screen is up
+        Logger::warn("MachineLink",
+                     "login ignored — no active QR session (screen closed/timed out)");
+        return;
+    }
 
     const QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
-    if (!doc.isObject()) return;
+    if (!doc.isObject()) {
+        Logger::warn("MachineLink", "login ignored — payload is not JSON");
+        return;
+    }
     const QJsonObject o = doc.object();
 
     // Discord-style single-use token: ignore any login that doesn't carry
     // THIS session's token (an old/stale QR can't sign anyone in).
-    if (m_token.isEmpty() || o.value("token").toString() != m_token) return;
+    const QString gotToken = o.value("token").toString();
+    if (m_token.isEmpty() || gotToken != m_token) {
+        Logger::warn("MachineLink",
+                     QString("login ignored — token mismatch (got='%1' want='%2'). "
+                             "Likely a stale QR was scanned.")
+                         .arg(gotToken, m_token));
+        return;
+    }
 
     // Accept either {"user":{...}} or a flat {id,name,points} payload.
     const QJsonObject u = o.contains(QStringLiteral("user"))
@@ -97,24 +124,49 @@ void MachineLink::renderQr(const QString &payload)
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     QDir().mkpath(dir);
     m_qrImagePath = dir + "/rewingo_qr.png";
+    const QString out = m_qrImagePath;
+
+    // Delete the previous session's QR FIRST. If the network hiccups and curl
+    // can't fetch the new code, the screen must show a spinner — NEVER a stale
+    // QR that still encodes an OLD token. A stale code makes the phone echo the
+    // wrong token, which the kiosk silently rejects, so the user never lands on
+    // the LCD. Removing it up front guarantees the displayed QR always matches
+    // the current m_token.
+    QFile::remove(out);
+    emit sessionChanged();                  // QML shows the spinner meanwhile
 
     // Qt's network can't resolve hosts on some kiosk networks, so fetch the QR
-    // PNG with curl (OS resolver) into a temp file; QML shows it. The payload
-    // is fixed, so this renders the same code every time.
+    // PNG with curl (OS resolver) into a temp file; QML shows it.
     const QString url =
         QStringLiteral("https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=")
         + QString::fromUtf8(QUrl::toPercentEncoding(payload));
 
-    auto *p = new QProcess(this);
-    const QString out = m_qrImagePath;
-    connect(p, &QProcess::finished, this,
-            [this, p](int, QProcess::ExitStatus) {
-        p->deleteLater();
-        emit sessionChanged();             // PNG ready → QML reloads it
-    });
-    p->start(QStringLiteral("curl"),
-             { QStringLiteral("-fsSL"), QStringLiteral("--max-time"),
-               QStringLiteral("15"), QStringLiteral("-o"), out, url });
+    // Retry a few times so a transient blip doesn't leave the QR screen blank.
+    auto attempt = std::make_shared<std::function<void(int)>>();
+    *attempt = [this, url, out, attempt](int tries) {
+        auto *p = new QProcess(this);
+        connect(p, &QProcess::finished, this,
+                [this, p, out, attempt, tries](int code, QProcess::ExitStatus) {
+            p->deleteLater();
+            const QFileInfo fi(out);
+            const bool ok = (code == 0 && fi.exists() && fi.size() > 100);
+            if (ok) {
+                emit sessionChanged();      // PNG ready → QML loads the new code
+                *attempt = nullptr;         // break the self-referential cycle
+            } else if (tries > 1) {
+                QTimer::singleShot(700, this,
+                                   [attempt, tries] { (*attempt)(tries - 1); });
+            } else {
+                Logger::warn("MachineLink",
+                             "QR render failed after retries — screen shows a spinner");
+                *attempt = nullptr;         // break the self-referential cycle
+            }
+        });
+        p->start(QStringLiteral("curl"),
+                 { QStringLiteral("-fsSL"), QStringLiteral("--max-time"),
+                   QStringLiteral("15"), QStringLiteral("-o"), out, url });
+    };
+    (*attempt)(3);
 }
 
 void MachineLink::setState(const QString &s)

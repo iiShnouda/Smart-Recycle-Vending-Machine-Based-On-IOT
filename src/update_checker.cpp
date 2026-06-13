@@ -286,8 +286,15 @@ void UpdateChecker::onAssetDownloaded(const QString &localPath)
 void UpdateChecker::launchHelperAndExit(const QString &localPath)
 {
     // The helper script lives at /usr/local/bin/rewingo-update-helper.
-    // Spawned detached so it survives our exit. The script runs `dpkg -i`
-    // then relaunches /usr/local/bin/rewingo.
+    // Spawned detached so it survives the kiosk being killed mid-update.
+    //
+    // We do NOT quit here any more. The helper installs the .deb while we're
+    // still running (replacing our on-disk binary is safe — we keep the open
+    // inode), then `pkill -x rewingo` once the NEW package is in place, so the
+    // autostart loop relaunches the new binary. Quitting early used to let the
+    // autostart loop relaunch the OLD binary in the middle of dpkg — the race
+    // that made the button "not work". So: launch, leave "installing…" on
+    // screen, and let the helper terminate us at exactly the right moment.
     const QString helper = QStringLiteral("/usr/local/bin/rewingo-update-helper");
     const QStringList args { localPath };
 
@@ -300,15 +307,9 @@ void UpdateChecker::launchHelperAndExit(const QString &localPath)
         return;
     }
     Logger::audit("Updater",
-                  QString("Helper launched (pid=%1); exiting.").arg(pid));
+                  QString("Helper launched (pid=%1); installing in background, "
+                          "kiosk will restart when done.").arg(pid));
     emit installFinished(QString());
-
-    // Give the helper a moment to spin up, then exit so dpkg can replace
-    // the running binary. The helper sleeps 1s before dpkg so this race
-    // is safe.
-    QTimer::singleShot(500, []() {
-        QCoreApplication::quit();
-    });
 }
 
 int UpdateChecker::compareSemver(const QString &a, const QString &b) const
