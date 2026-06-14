@@ -93,20 +93,12 @@ def main():
 
     det  = cv2.FaceDetectorYN.create(str(YUNET_PATH), "", (320, 320),
                                      score_threshold=0.7, nms_threshold=0.3, top_k=50)
-    sess = ort.InferenceSession(str(MODEL_PATH), providers=["CPUExecutionProvider"])
-    iname  = sess.get_inputs()[0].name
-    ishape = tuple(sess.get_inputs()[0].shape)
 
+    # Open the camera FIRST so the live feed shows within ~1 s instead of
+    # staying blank while the (slower) ArcFace model loads.
     kind, h = open_camera()
     if kind is None:
         emit({"e": "error", "msg": "camera open failed"}); return
-
-    def embed(face):
-        img = cv2.resize(face, (112, 112)).astype(np.float32)
-        img = (img - 127.5) / 128.0
-        if len(ishape) == 4 and ishape[1] == 3:
-            img = np.transpose(img, (2, 0, 1))
-        return l2n(sess.run(None, {iname: np.expand_dims(img, 0)})[0][0].astype(np.float32))
 
     def write_preview(fr):
         try:
@@ -119,6 +111,23 @@ def main():
                 os.replace(_tmp, PREVIEW_PATH)
         except Exception:
             pass
+
+    # Show a first frame immediately, THEN load ArcFace (the slow part) so the
+    # camera feed is already on screen while the model initialises.
+    _fr0 = grab(kind, h)
+    if _fr0 is not None:
+        write_preview(_fr0)
+
+    sess   = ort.InferenceSession(str(MODEL_PATH), providers=["CPUExecutionProvider"])
+    iname  = sess.get_inputs()[0].name
+    ishape = tuple(sess.get_inputs()[0].shape)
+
+    def embed(face):
+        img = cv2.resize(face, (112, 112)).astype(np.float32)
+        img = (img - 127.5) / 128.0
+        if len(ishape) == 4 and ishape[1] == 3:
+            img = np.transpose(img, (2, 0, 1))
+        return l2n(sess.run(None, {iname: np.expand_dims(img, 0)})[0][0].astype(np.float32))
 
     emit({"e": "stage", "stage": "RECOGNIZE", "seconds": RECOGNITION_SEC})
     speak("Please look at the camera")
