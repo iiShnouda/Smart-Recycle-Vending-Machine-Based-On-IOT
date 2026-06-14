@@ -5,6 +5,35 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] — 2026-06-14
+
+### Added
+- **Full cloud DB schema (multi-machine).** `DATABASE_SCHEMA.md` documents
+  the complete MongoDB design — global collections (`users`, `product_catalog`,
+  `machines`, `config`) and per-machine ones (`products`, `transactions`,
+  `inventory`, `dispense_faults`), where "total across all machines" is just the
+  same query without a `machineId` filter. Covers everything: full user record
+  (name/email/mobile/password-hash/role/points/face/recycle counts/stats),
+  product record (name/image/points/load-cell weight + calibration), the global
+  product category, and per-/cross-machine transactions.
+- **Point value in EGP (dev-only, admin read-only).** New `config` singleton holds
+  `pointValueEGP`; `schema.js` seeds it and never overwrites it, so only the
+  developer changes the EGP value. `GET /config` lets the admin panel *show*
+  "1 point = X EGP" without being able to change it. Admins still change
+  *points* (`products.pricePoints`, `config.recycleRewards`).
+- **Backend now persists the full model.** `iot/kiosk-backend` ensures indexes,
+  enriches each transaction with the frozen `egpValue` and rolls the totals into
+  the `users` (points, recycle counts, stats) and `machines` (per-machine stats)
+  docs; `status` updates the `machines` registry; new `GET /machines` returns the
+  registry **plus a grand total** across all machines.
+
+### Changed
+- **Kiosk runs windowed (with frame) for now** — fullscreen disabled in `Main.qml`.
+
+### Removed
+- Dead `face_rec/scripts/machine_link_sidecar.py` (the old WebSocket relay,
+  superseded by the MQTT `MachineLink`). No orphan QML/C++ remained otherwise.
+
 ## [0.12.0] — 2026-06-14
 
 ### Added

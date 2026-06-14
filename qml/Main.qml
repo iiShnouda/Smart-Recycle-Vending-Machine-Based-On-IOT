@@ -7,7 +7,8 @@ import Recycle_Vending_Machine_LCD
 Window {
     id: window
     visible: true
-    //visibility: Window.Windowed
+    // Windowed WITH the normal window frame for now (fullscreen disabled).
+    visibility: Window.Windowed
     // Production display: 15.6" LCD in portrait → 1080 × 1920
     width: 1080
     height: 1500
