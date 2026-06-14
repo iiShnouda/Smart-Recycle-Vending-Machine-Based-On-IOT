@@ -1,0 +1,32 @@
+[Unit]
+# ReWinGo kiosk IoT backend — bridges HiveMQ MQTT <-> MongoDB Atlas and serves
+# the /config, /machines, /link, /claim API. Runs as a systemd service so it
+# starts on boot and restarts on crash.
+#
+# INSTALL on the Pi (or any Linux host):
+#   1. Install Node.js:        sudo apt install -y nodejs npm
+#   2. Copy the backend:       sudo mkdir -p /opt/rewingo-backend
+#                              sudo cp -r iot/kiosk-backend/* /opt/rewingo-backend/
+#   3. Install deps:           cd /opt/rewingo-backend && sudo npm install --omit=dev
+#   4. Add MONGODB_URI to /etc/rewingo/.env  (see DATABASE_SCHEMA.md / README)
+#   5. Install + enable the service:
+#        sudo cp /opt/rewingo-backend/rewingo-kiosk-backend.service /etc/systemd/system/
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable --now rewingo-kiosk-backend
+#   6. Check it:                systemctl status rewingo-kiosk-backend
+#                              journalctl -u rewingo-kiosk-backend -f
+Description=ReWinGo kiosk IoT backend (MQTT <-> MongoDB + claim API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rewingo-backend
+ExecStart=/usr/bin/node /opt/rewingo-backend/index.js
+EnvironmentFile=/etc/rewingo/.env
+Restart=always
+RestartSec=5
+User=rewingo
+
+[Install]
+WantedBy=multi-user.target
