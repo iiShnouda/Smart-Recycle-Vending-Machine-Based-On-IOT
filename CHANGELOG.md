@@ -5,6 +5,15 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] — 2026-06-14
+
+### Fixed
+- **Face login no longer times out before recognising you.** The safety-net
+  timeout on `FaceDetectionPage` was 12 s, but a login takes camera-open (~3 s) +
+  model-load (~2 s) + the recognise window (~8 s) ≈ 13 s — so it fired first and
+  sent enrolled users to registration. Raised to 20 s (a real match still
+  early-exits in ~2 s).
+
 ## [0.13.0] — 2026-06-14
 
 ### Added

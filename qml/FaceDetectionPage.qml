@@ -75,9 +75,12 @@ Rectangle {
         }
     }
     // Safety net: if the sidecar never returns a result, don't get stuck.
+    // 20 s — must comfortably exceed camera-open (~3 s) + model-load (~2 s) +
+    // the recognise window (~8 s), or it kicks enrolled users to registration
+    // before recognition even finishes. A real match still early-exits in ~2 s.
     Timer {
         id: scanTimeout
-        interval: 12000
+        interval: 20000
         running: status === 0
         repeat: false
         onTriggered: {
