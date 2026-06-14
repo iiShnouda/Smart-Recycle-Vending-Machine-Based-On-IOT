@@ -33,6 +33,11 @@ Rectangle {
     }
 
     function resetState() {
+        // Re-ENABLE idle on entry: some flows (e.g. QR login, admin) call
+        // Idle.disable(), and only MainPage being the logged-in home should
+        // restore the normal 1-minute auto-return-to-start. Without this, after
+        // logging in the page would never time out back to the start screen.
+        Idle.enable()
         Idle.touch()
         navigationTimer.stop()
     }

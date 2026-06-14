@@ -5,6 +5,15 @@ All notable changes to ReWinGo are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] — 2026-06-14
+
+### Fixed
+- **Main page now auto-returns to the start screen after 1 min idle.** It didn't
+  if you reached MainPage via a flow that called `Idle.disable()` (QR login,
+  admin) — only AdminMainPage ever re-enabled idle. MainPage's `resetState()`
+  now calls `Idle.enable()` on entry, so the logged-in home always restores the
+  60 s auto-return.
+
 ## [0.14.0] — 2026-06-14
 
 ### Fixed
