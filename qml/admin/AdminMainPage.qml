@@ -191,6 +191,27 @@ Rectangle {
             font.weight: Font.ExtraBold
             anchors.horizontalCenter: parent.horizontalCenter
         }
+
+        // Point value in EGP — read-only (set by the developer, not the admin).
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: egpRow.implicitWidth + 44
+            height: 54; radius: 27
+            color: "#ECFDF5"; border.width: 1; border.color: "#16A34A"
+            Row {
+                id: egpRow
+                anchors.centerIn: parent
+                spacing: 10
+                Text { text: "💱"; font.pixelSize: 24
+                       anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("1 point = %1 EGP")
+                              .arg(RecycleSession.pointValueEGP.toFixed(2))
+                    color: "#166534"; font.pixelSize: 21; font.weight: Font.ExtraBold
+                }
+            }
+        }
     }
 
     // ============ Nav grid ============
