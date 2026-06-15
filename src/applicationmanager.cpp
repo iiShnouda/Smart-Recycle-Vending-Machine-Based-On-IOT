@@ -9,6 +9,7 @@
 #include "../include/diagnostics_runner.h"
 #include "../include/yolo_runner.h"
 #include "../include/recycle_classifier.h"
+#include "../include/barcode_scanner.h"
 #include "../include/face_service.h"
 #include "../include/face_rec_sidecar.h"
 #include "../include/analytics.h"
@@ -72,6 +73,7 @@ void ApplicationManager::initialize()
     new AdminAuth(this);
     new FaceService(this);
     new FaceRecSidecar(this);
+    new BarcodeScanner(this);   // QML singleton: admin "scan a product" flow
     new ProductsModel(this);
     new ProductCatalog(this);
     new OpenFoodFactsClient(this);

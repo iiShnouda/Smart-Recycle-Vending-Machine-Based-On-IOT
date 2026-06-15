@@ -75,6 +75,10 @@ public slots:
      *  Returns false if N is zero or the shelf is below the tare.        */
     Q_INVOKABLE bool calibrateUnitWeight(int slot, int currentRaw, int knownCount);
 
+    /** First slot with no product configured (name still "Slot N"), or -1 if
+     *  all 8 are taken. Used to suggest a slot when scanning a new product. */
+    Q_INVOKABLE int firstEmptySlot() const;
+
     /** Snapshot helpers for QML diagnostics screens. */
     Q_INVOKABLE int emptyShelfRaw(int slot) const;
     Q_INVOKABLE int unitWeightRaw(int slot) const;

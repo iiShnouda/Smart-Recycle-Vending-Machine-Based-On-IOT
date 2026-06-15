@@ -99,3 +99,60 @@ void OpenFoodFactsClient::search(const QString &query, int pageSize)
         emit results(query, list);
     });
 }
+
+void OpenFoodFactsClient::lookupBarcode(const QString &barcode)
+{
+    const QString code = barcode.trimmed();
+    if (code.isEmpty()) {
+        emit productResolved(code, false, { {"barcode", code} });
+        return;
+    }
+
+    // OFF product endpoint: /api/v0/product/<barcode>.json → { status, product }
+    QUrl url("https://world.openfoodfacts.org/api/v0/product/" + code + ".json");
+    QUrlQuery q;
+    q.addQueryItem("fields",
+        "code,product_name,brands,image_front_url,image_front_small_url,"
+        "product_quantity,quantity");
+    url.setQuery(q);
+
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::UserAgentHeader,
+                  "ReWinGo-Kiosk/1.0 (https://github.com/)");
+    auto *reply = m_net->get(req);
+
+    QObject::connect(reply, &QNetworkReply::finished, this,
+                     [this, reply, code]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            Logger::warn("OFF", "Barcode lookup failed",
+                         { {"barcode", code}, {"err", reply->errorString()} });
+            emit productResolved(code, false, { {"barcode", code} });
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        const QJsonObject root = doc.object();
+        // status 1 = found, 0 = not found.
+        if (root.value("status").toInt() != 1) {
+            emit productResolved(code, false, { {"barcode", code} });
+            return;
+        }
+        const QJsonObject p = root.value("product").toObject();
+        int weightG = 0;
+        const QJsonValue qv = p.value("product_quantity");
+        if (qv.isDouble())      weightG = qRound(qv.toDouble());
+        else if (qv.isString()) weightG = qv.toString().toInt();
+
+        const QString hires = p.value("image_front_url").toString();
+        QVariantMap r;
+        r["name"]     = p.value("product_name").toString();
+        r["brand"]    = p.value("brands").toString();
+        r["barcode"]  = code;
+        r["weightG"]  = weightG;
+        r["imageUrl"] = hires.isEmpty()
+                      ? p.value("image_front_small_url").toString() : hires;
+        Logger::info("OFF", "Barcode resolved",
+                     { {"barcode", code}, {"name", r["name"].toString()} });
+        emit productResolved(code, !r["name"].toString().isEmpty(), r);
+    });
+}

@@ -212,6 +212,15 @@ bool ProductsModel::calibrateUnitWeight(int slot, int currentRaw, int knownCount
     return true;
 }
 
+int ProductsModel::firstEmptySlot() const
+{
+    for (const Row &r : m_rows) {
+        if (r.name.isEmpty() || r.name.startsWith("Slot "))
+            return r.slot;
+    }
+    return -1;
+}
+
 int ProductsModel::emptyShelfRaw(int slot) const
 {
     if (slot < 1 || slot > 8) return 0;

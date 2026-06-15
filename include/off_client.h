@@ -44,8 +44,12 @@ public:
     static OpenFoodFactsClient *s_instance;
 
 public slots:
-    /** Fire an async search. Results land in the `results` signal. */
+    /** Fire an async search by name. Results land in the `results` signal. */
     Q_INVOKABLE void search(const QString &query, int pageSize = 8);
+
+    /** Look a product up by its scanned barcode (EAN/UPC). Result lands in
+     *  the `productResolved` signal. Used by the "scan a product" flow. */
+    Q_INVOKABLE void lookupBarcode(const QString &barcode);
 
 signals:
     /** Emitted with the parsed list of candidates. Each entry is a
@@ -55,6 +59,12 @@ signals:
 
     /** Network or parse error. The admin UI just falls back to manual entry. */
     void searchFailed(const QString &query, const QString &reason);
+
+    /** Barcode lookup result. `found` is false if OFF has no such product;
+     *  `product` then only carries the barcode. Keys: name, brand, imageUrl,
+     *  weightG, barcode. */
+    void productResolved(const QString &barcode, bool found,
+                         const QVariantMap &product);
 
 private:
     QNetworkAccessManager *m_net = nullptr;
