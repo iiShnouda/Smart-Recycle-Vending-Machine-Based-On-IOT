@@ -14,7 +14,9 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    Component.onCompleted: { Idle.disable(); RecycleSession.start() }
+    // The waiting page already armed the session (RecycleSession.start);
+    // we just display the live tally here so we don't reset mid-sequence.
+    Component.onCompleted: Idle.disable()
 
     function endSession() {
         var total = RecycleSession.finish()

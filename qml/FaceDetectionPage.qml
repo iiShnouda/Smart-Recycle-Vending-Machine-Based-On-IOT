@@ -32,17 +32,12 @@ Rectangle {
     // ── Lifecycle: the sidecar owns the camera now ───────────────
     Component.onCompleted: {
         Idle.touch()
+        FaceFrame.start()        // live preview (C++ feeds frames as data URLs)
         FaceRec.identify()
     }
-    Component.onDestruction: FaceRec.cancel()
+    Component.onDestruction: { FaceRec.cancel(); FaceFrame.stop() }
     StackView.onActivated:   Idle.touch()
-    StackView.onDeactivated: FaceRec.cancel()
-
-    // Reload the preview frame the sidecar writes (~8 fps).
-    Timer {
-        interval: 120; running: status === 0; repeat: true
-        onTriggered: page.previewTick++
-    }
+    StackView.onDeactivated: { FaceRec.cancel(); FaceFrame.stop() }
 
     // ── FaceRec events ───────────────────────────────────────────
     Connections {
@@ -156,11 +151,9 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                // C++ provider reads the sidecar's frame fresh each tick — the
-                // old file:///tmp/...?t= approach left this disc blank on the Pi.
-                source: status === 0
-                        ? "image://facepreview/" + previewTick
-                        : ""
+                // Live frame as a base64 data URL fed from C++ (FaceFrame) —
+                // reliably renders on the Pi where file:// / image:// stayed blank.
+                source: status === 0 ? FaceFrame.frame : ""
             }
 
             Text {

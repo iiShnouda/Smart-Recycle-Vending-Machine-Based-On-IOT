@@ -19,12 +19,31 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // Idle timer is now centralised in IdleManager (singleton "Idle").
-    // We just touch it on lifecycle events + any user activity.
+    // Idle timer is centralised in IdleManager (singleton "Idle").
     function bumpIdle() { Idle.touch() }
 
-    Component.onCompleted: Idle.touch()
-    StackView.onActivated: Idle.touch()
+    // Arm the STM32 recycle lane on entry. When IR1 trips (EVT,ENTRY) the
+    // session emits itemEntered → we move to the live counter and the STM32
+    // runs the sort sequence. Guard so we navigate exactly once.
+    property bool navigated: false
+    Component.onCompleted: { Idle.disable(); RecycleSession.start() }
+    StackView.onActivated:   Idle.disable()
+
+    Connections {
+        target: RecycleSession
+        function onItemEntered() {
+            if (waitingPage.navigated) return
+            waitingPage.navigated = true
+            stackView.push(sessionPageComponent)
+        }
+    }
+    Component { id: sessionPageComponent; RecycleSessionPage {} }
+
+    // Leaving before any item entered → disarm the lane.
+    function leave() {
+        if (!waitingPage.navigated) RecycleSession.finish()
+        stackView.pop()
+    }
 
     TapHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
@@ -45,7 +64,7 @@ Rectangle {
         border.color: "#D8E0CF"
         z: 10
 
-        BounceOnPress { onTapped: stackView.pop() }
+        BounceOnPress { onTapped: waitingPage.leave() }
 
         Text {
             anchors.centerIn: parent
@@ -71,6 +90,7 @@ Rectangle {
 
         BounceOnPress {
             onTapped: {
+                if (!waitingPage.navigated) RecycleSession.finish()
                 while (stackView && stackView.depth > 1) stackView.pop()
             }
         }
@@ -116,28 +136,21 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: 70
 
+        // Display-only fill gauges. The real flow is hardware-driven: drop a
+        // bottle/can, IR1 detects it, and we move to the live counter — there
+        // are no manual "insert" test buttons.
         TankCircle {
             label: { langTick; return qsTr("Plastic Bottles") }
             iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
             fillPercent: waitingPage.plasticTankVolume
-
-            onInserted: {
-                Idle.touch()
-                waitingPage.plasticTankVolume = Math.min(1.0, waitingPage.plasticTankVolume + 0.06)
-                stackView.push(countingPageComponent, { plasticCount: 1 })
-            }
+            onInserted: Idle.touch()
         }
 
         TankCircle {
             label: { langTick; return qsTr("Aluminum Cans") }
             iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
             fillPercent: waitingPage.canTankVolume
-
-            onInserted: {
-                Idle.touch()
-                waitingPage.canTankVolume = Math.min(1.0, waitingPage.canTankVolume + 0.05)
-                stackView.push(countingPageComponent, { canCount: 1 })
-            }
+            onInserted: Idle.touch()
         }
     }
 

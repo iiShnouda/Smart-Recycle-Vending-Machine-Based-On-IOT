@@ -33,16 +33,13 @@ Rectangle {
     // The enroller reads the first stdin line as "name<TAB>mobile" (mobile
     // optional). The C++ enroll(name) just forwards the string, so no C++
     // change is needed to carry the number through.
-    Component.onCompleted: FaceRec.enroll(
-        newUserMobile.length > 0 ? newUserName + "\t" + newUserMobile : newUserName)
-    Component.onDestruction: FaceRec.cancel()
-    StackView.onDeactivated:  FaceRec.cancel()
-
-    // Reload the preview frame the sidecar writes (~8 fps).
-    Timer {
-        interval: 120; running: true; repeat: true
-        onTriggered: page.previewTick++
+    Component.onCompleted: {
+        FaceFrame.start()        // live preview (C++ feeds frames as data URLs)
+        FaceRec.enroll(
+            newUserMobile.length > 0 ? newUserName + "\t" + newUserMobile : newUserName)
     }
+    Component.onDestruction: { FaceRec.cancel(); FaceFrame.stop() }
+    StackView.onDeactivated:  { FaceRec.cancel(); FaceFrame.stop() }
 
     Connections {
         target: FaceRec
@@ -146,9 +143,9 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                // C++ provider reads the sidecar's frame fresh each tick (the
-                // old file:///tmp/...?t= URL left this blank on the Pi).
-                source: "image://facepreview/" + previewTick
+                // Live frame as a base64 data URL fed from C++ (FaceFrame) —
+                // reliably renders where file:// / image:// stayed blank.
+                source: FaceFrame.frame
             }
 
             // …turned into a CIRCLE: paint the page background over the corners

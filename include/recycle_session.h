@@ -87,6 +87,7 @@ signals:
 
     void itemAccepted(const QString &type, int points);  /* drives the coin pop */
     void itemRejected(const QString &reason);
+    void itemEntered();                                  /* EVT,ENTRY (IR1) */
     void cameraRequested();                              /* EVT,CAMERA */
     void sendCommand(const QString &cmd);                /* → serial out */
 

@@ -110,6 +110,7 @@ void RecycleSession::onSerialLine(const QString &line)
 
     if (line.startsWith("EVT,ENTRY")) {
         setLast(tr("Item detected — moving in…"));
+        emit itemEntered();          // IR1 tripped → QML moves to the counter
     } else if (line.startsWith("EVT,CAMERA")) {
         setLast(tr("Scanning…"));
         emit cameraRequested();
