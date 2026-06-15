@@ -15,6 +15,7 @@ class YoloRunner;
 class MqttClient;
 class MachineLink;
 class InventoryScanner;
+class RecycleClassifier;
 
 /**
  * ApplicationManager — single instance, exposed to QML two ways:
@@ -149,6 +150,9 @@ private:
     // YOLO models (face + recycle)
     YoloRunner        *m_faceYolo     = nullptr;
     YoloRunner        *m_recycleYolo  = nullptr;
+
+    // Recycle camera "brain" — headless YOLO sidecar that answers EVT,CAMERA
+    RecycleClassifier *m_recycleClassifier = nullptr;
 
     // MongoDB Atlas Data API client
     MqttClient        *m_mqtt         = nullptr;

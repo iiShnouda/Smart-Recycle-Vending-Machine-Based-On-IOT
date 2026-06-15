@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.15.0 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.16.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -113,6 +113,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         include/off_client.h            src/off_client.cpp
         include/update_checker.h        src/update_checker.cpp
         include/recycle_session.h       src/recycle_session.cpp
+        include/recycle_classifier.h    src/recycle_classifier.cpp
         include/Serial_Connection.h     src/Serial_Connection.cpp
     RESOURCES
         resources/assets/vending.png

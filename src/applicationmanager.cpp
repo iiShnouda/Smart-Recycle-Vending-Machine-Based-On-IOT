@@ -8,6 +8,7 @@
 #include "../include/products_model.h"
 #include "../include/diagnostics_runner.h"
 #include "../include/yolo_runner.h"
+#include "../include/recycle_classifier.h"
 #include "../include/face_service.h"
 #include "../include/face_rec_sidecar.h"
 #include "../include/analytics.h"
@@ -218,6 +219,14 @@ void ApplicationManager::initialize()
                 RecycleSession::s_instance, &RecycleSession::onSerialLine);
         connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
                 this, [this](const QString &cmd){ sendSerial(cmd, 0); });
+
+        // Camera "brain": EVT,CAMERA → run the headless recycle classifier
+        // (CSI cam + YOLO) → send VERDICT BOTTLE|CAN|REJECT back to the STM32.
+        m_recycleClassifier = new RecycleClassifier(this);
+        connect(RecycleSession::s_instance, &RecycleSession::cameraRequested,
+                m_recycleClassifier, &RecycleClassifier::classify);
+        connect(m_recycleClassifier, &RecycleClassifier::verdict,
+                RecycleSession::s_instance, &RecycleSession::sendVerdict);
     }
 
     // ── Cabinet LEDs (relays 1+2) ───────────────────────────────────────
