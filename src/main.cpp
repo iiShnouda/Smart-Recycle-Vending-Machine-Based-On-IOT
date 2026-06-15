@@ -1,4 +1,5 @@
 #include "../include/applicationmanager.h"
+#include "../include/face_preview_provider.h"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -66,6 +67,10 @@ int main(int argc, char *argv[])
     appManager.setQmlEngine(&engine);
 
     engine.rootContext()->setContextProperty("appManager", &appManager);
+
+    // Live face-rec preview: reads <tmp>/rewingo_face.jpg fresh per request so
+    // the login/enroll preview disc actually updates (file:// + ?t= was blank).
+    engine.addImageProvider(QStringLiteral("facepreview"), new FacePreviewProvider);
 
     // Find Main.qml in the qrc. qt_add_qml_module's prefix shifted across
     // Qt 6 minor versions depending on the QTP0001 policy:

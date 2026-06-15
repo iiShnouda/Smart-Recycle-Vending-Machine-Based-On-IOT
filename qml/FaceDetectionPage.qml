@@ -156,9 +156,10 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                asynchronous: true
+                // C++ provider reads the sidecar's frame fresh each tick — the
+                // old file:///tmp/...?t= approach left this disc blank on the Pi.
                 source: status === 0
-                        ? "file:///tmp/rewingo_face.jpg?t=" + previewTick
+                        ? "image://facepreview/" + previewTick
                         : ""
             }
 

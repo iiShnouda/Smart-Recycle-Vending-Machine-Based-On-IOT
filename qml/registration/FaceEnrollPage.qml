@@ -146,8 +146,9 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                asynchronous: true
-                source: "file:///tmp/rewingo_face.jpg?t=" + previewTick
+                // C++ provider reads the sidecar's frame fresh each tick (the
+                // old file:///tmp/...?t= URL left this blank on the Pi).
+                source: "image://facepreview/" + previewTick
             }
 
             // …turned into a CIRCLE: paint the page background over the corners
