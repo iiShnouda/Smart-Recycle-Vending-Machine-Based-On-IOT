@@ -256,17 +256,19 @@ Rectangle {
             property string pimage: ""
             property bool   pactive: false
             property int    pcount: 0
+            property bool   pcalibrated: false
 
             Component.onCompleted: refresh()
             function refresh() {
                 // QAbstractListModel exposes data via index()
                 const idx = ProductsModel.index(slotIdx, 0)
                 if (!idx.valid) return
-                pname    = ProductsModel.data(idx, Qt.UserRole + 2)  // RoleName
-                pprice   = ProductsModel.data(idx, Qt.UserRole + 3)
-                pimage   = ProductsModel.data(idx, Qt.UserRole + 4)
-                pactive  = ProductsModel.data(idx, Qt.UserRole + 5)
-                pcount   = ProductsModel.data(idx, Qt.UserRole + 6)
+                pname       = ProductsModel.data(idx, Qt.UserRole + 2)  // RoleName
+                pprice      = ProductsModel.data(idx, Qt.UserRole + 3)
+                pimage      = ProductsModel.data(idx, Qt.UserRole + 4)
+                pactive     = ProductsModel.data(idx, Qt.UserRole + 5)
+                pcount      = ProductsModel.data(idx, Qt.UserRole + 6)
+                pcalibrated = ProductsModel.data(idx, Qt.UserRole + 11) // RoleCalibrated
             }
             Connections {
                 target: ProductsModel
@@ -274,7 +276,10 @@ Rectangle {
                 function onModelReset()  { refresh() }
             }
 
-            readonly property bool inStock:  pcount > 0
+            // A calibrated slot uses the live load-cell count; an uncalibrated
+            // slot can't be measured, so we assume it's in stock (sellable)
+            // rather than blocking it — keeps things automatic, no manual entry.
+            readonly property bool inStock:  pcalibrated ? (pcount > 0) : true
             readonly property bool isActive: pactive === true || pactive === 1
             readonly property bool canBuy:   isActive && inStock
             readonly property bool tooPoor:  canBuy && (vendingPage.userPoints - vendingPage.cartTotal()) < pprice

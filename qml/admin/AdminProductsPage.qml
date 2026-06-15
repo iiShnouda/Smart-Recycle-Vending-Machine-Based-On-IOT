@@ -224,7 +224,9 @@ Rectangle {
                         editName.text      = isEmpty ? "" : name
                         editPrice.text     = pricePoints
                         editImage.text     = imagePath
-                        editActive.checked = isActive
+                        // A fresh slot defaults to Active — you're adding a
+                        // product because you want customers to see it.
+                        editActive.checked = isEmpty ? true : isActive
                         editDialog.open()
                     }
                 }
@@ -562,6 +564,15 @@ Rectangle {
                 editImage.text,
                 editActive.checked
             )
+            // If this slot still isn't calibrated, gently offer to do the
+            // one-time scale calibration so it AUTO-counts (no manual entry).
+            // Until then the slot is assumed in-stock so it can still be sold.
+            var nm = editName.text
+            if (nm.length > 0 && ProductsModel.unitWeightRaw(page.editingSlot) <= 0) {
+                calibratePrompt.slotNo   = page.editingSlot
+                calibratePrompt.prodName = nm
+                calibratePrompt.open()
+            }
         }
     }
 
@@ -705,6 +716,76 @@ Rectangle {
                         // admin will refine with the Tare button next.
                         ProductsModel.emptyShelfRaw(page.editingSlot) + seedRaw,
                         1)
+                }
+            }
+        }
+    }
+
+    // ══════════════════════ CALIBRATION PROMPT ══════════════════════
+    // Shown right after configuring a product whose slot isn't calibrated.
+    // Calibration is the ONLY thing that makes counting automatic — so we
+    // nudge the admin to do the one-time scale setup instead of asking them
+    // to type stock numbers. Skipping is fine: the slot is assumed in-stock
+    // until the scale is calibrated.
+    Dialog {
+        id: calibratePrompt
+        property int    slotNo: -1
+        property string prodName: ""
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        focus: true
+        closePolicy: Popup.NoAutoClose
+        Overlay.modal: Rectangle { color: "#B0000000" }
+        width: 720; height: 460
+        standardButtons: Dialog.NoButton
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 24
+            spacing: 18
+
+            Text { text: "⚖"; font.pixelSize: 76
+                   anchors.horizontalCenter: parent.horizontalCenter }
+            Text {
+                text: qsTr("Set up automatic stock counting?")
+                color: "#1F2A1B"; font.pixelSize: 28; font.weight: Font.ExtraBold
+                horizontalAlignment: Text.AlignHCenter; width: parent.width
+                wrapMode: Text.WordWrap
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("Calibrate the shelf scale for “%1” once, and the machine auto-counts every restock — no manual numbers. Until then this slot is shown in stock.")
+                          .arg(calibratePrompt.prodName)
+                color: "#5A6B52"; font.pixelSize: 17
+                horizontalAlignment: Text.AlignHCenter; width: parent.width
+                wrapMode: Text.WordWrap
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Row {
+                spacing: 16
+                anchors.horizontalCenter: parent.horizontalCenter
+                Rectangle {
+                    width: 300; height: 76; radius: 38; color: "#16A34A"
+                    TapHandler {
+                        onTapped: {
+                            calibratePrompt.close()
+                            // Re-open the slot editor; its calibration block
+                            // auto-expands because the slot isn't calibrated.
+                            page.editingSlot = calibratePrompt.slotNo
+                            editDialog.open()
+                        }
+                    }
+                    Text { anchors.centerIn: parent; text: qsTr("Calibrate now")
+                           color: "#FFFFFF"; font.pixelSize: 22; font.weight: Font.ExtraBold }
+                }
+                Rectangle {
+                    width: 260; height: 76; radius: 38
+                    color: "transparent"; border.width: 2; border.color: "#9CA3AF"
+                    TapHandler { onTapped: calibratePrompt.close() }
+                    Text { anchors.centerIn: parent; text: qsTr("Skip for now")
+                           color: "#5A6B52"; font.pixelSize: 20; font.weight: Font.Bold }
                 }
             }
         }

@@ -226,7 +226,7 @@ void ApplicationManager::initialize()
         connect(RecycleSession::s_instance, &RecycleSession::cameraRequested,
                 m_recycleClassifier, &RecycleClassifier::classify);
         connect(m_recycleClassifier, &RecycleClassifier::verdict,
-                RecycleSession::s_instance, &RecycleSession::sendVerdict);
+                RecycleSession::s_instance, &RecycleSession::onCameraVerdict);
     }
 
     // ── Cabinet LEDs (relays 1+2) ───────────────────────────────────────

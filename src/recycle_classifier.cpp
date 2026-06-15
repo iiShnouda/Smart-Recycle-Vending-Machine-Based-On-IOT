@@ -129,11 +129,16 @@ void RecycleClassifier::onStdout()
         const QString ev = obj.value("e").toString();
 
         if (ev == "verdict") {
-            const QString v = obj.value("verdict").toString().toUpper();
-            if (v == "BOTTLE" || v == "CAN")
-                emitVerdictOnce(v);
+            // Emit the raw sub-class so RecycleSession can score small (1) vs
+            // large (2) bottles. cls is small_bottle | large_bottle | can.
+            const QString v   = obj.value("verdict").toString().toLower();
+            const QString cls = obj.value("cls").toString();
+            if (v == "bottle")
+                emitVerdictOnce(cls.isEmpty() ? QStringLiteral("small_bottle") : cls);
+            else if (v == "can")
+                emitVerdictOnce(QStringLiteral("can"));
             else
-                emitVerdictOnce(QStringLiteral("REJECT"));
+                emitVerdictOnce(QStringLiteral("reject"));
         } else if (ev == "error") {
             Logger::warn("Recycle", "Classifier error",
                          { {"msg", obj.value("msg").toString()} });

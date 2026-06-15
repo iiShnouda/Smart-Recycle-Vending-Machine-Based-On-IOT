@@ -10,9 +10,12 @@ RecycleSession::RecycleSession(QObject *parent) : QObject(parent)
     if (!s_instance) s_instance = this;
 
     // Point values are admin-configurable + persisted.
+    //   small bottle = 1,  large bottle = 2,  can = 2.
     QSettings s;
-    m_bottlePts = s.value("recycle/bottlePoints", 1).toInt();
-    m_canPts    = s.value("recycle/canPoints",    2).toInt();
+    m_smallPts = s.value("recycle/smallBottlePoints", 1).toInt();
+    m_largePts = s.value("recycle/largeBottlePoints", 2).toInt();
+    m_canPts   = s.value("recycle/canPoints",         2).toInt();
+    m_pointEGP = s.value("recycle/pointValueEGP",   0.4).toDouble();
 }
 
 void RecycleSession::setLast(const QString &str)
@@ -24,7 +27,8 @@ void RecycleSession::setLast(const QString &str)
 
 void RecycleSession::start()
 {
-    m_bottles = m_cans = m_rejected = 0;
+    m_smallBottles = m_largeBottles = m_cans = m_rejected = 0;
+    m_pendingLargeBottle = false;
     emit countsChanged();
     setLast(tr("Insert a bottle or can"));
     m_active = true;
@@ -40,8 +44,8 @@ int RecycleSession::finish()
     emit sendCommand(QStringLiteral("RECYCLE 0"));   // lights + camera off
     const int total = totalPoints();
     Logger::audit("Recycle", "Session finished",
-                  { {"bottles", m_bottles}, {"cans", m_cans},
-                    {"rejected", m_rejected}, {"points", total} });
+                  { {"smallBottles", m_smallBottles}, {"largeBottles", m_largeBottles},
+                    {"cans", m_cans}, {"rejected", m_rejected}, {"points", total} });
     return total;
 }
 
@@ -50,17 +54,42 @@ void RecycleSession::sendVerdict(const QString &v)
     emit sendCommand(QStringLiteral("VERDICT ") + v.toUpper());
 }
 
+void RecycleSession::onCameraVerdict(const QString &cls)
+{
+    // cls is the classifier's raw sub-class. Remember the bottle size so we
+    // can award 1 (small) vs 2 (large) points when the item actually drops,
+    // then hand the STM32 the BOTTLE/CAN/REJECT verdict it sorts on.
+    const QString c = cls.toLower();
+    if (c.contains("bottle")) {
+        m_pendingLargeBottle = c.contains("large");
+        sendVerdict(QStringLiteral("BOTTLE"));
+    } else if (c.contains("can")) {
+        sendVerdict(QStringLiteral("CAN"));
+    } else {
+        sendVerdict(QStringLiteral("REJECT"));
+    }
+}
+
 void RecycleSession::setBaskets(bool bottleFull, bool canFull)
 {
     emit sendCommand(QStringLiteral("BASKETS %1 %2")
                          .arg(bottleFull ? 1 : 0).arg(canFull ? 1 : 0));
 }
 
-void RecycleSession::setBottlePoints(int p)
+void RecycleSession::setSmallBottlePoints(int p)
 {
-    if (p < 0 || p == m_bottlePts) return;
-    m_bottlePts = p;
-    QSettings().setValue("recycle/bottlePoints", p);
+    if (p < 0 || p == m_smallPts) return;
+    m_smallPts = p;
+    QSettings().setValue("recycle/smallBottlePoints", p);
+    emit configChanged();
+    emit countsChanged();
+}
+
+void RecycleSession::setLargeBottlePoints(int p)
+{
+    if (p < 0 || p == m_largePts) return;
+    m_largePts = p;
+    QSettings().setValue("recycle/largeBottlePoints", p);
     emit configChanged();
     emit countsChanged();
 }
@@ -85,15 +114,20 @@ void RecycleSession::onSerialLine(const QString &line)
         setLast(tr("Scanning…"));
         emit cameraRequested();
     } else if (line.startsWith("EVT,DROPPED,BOTTLE")) {
-        ++m_bottles; emit countsChanged();
-        emit itemAccepted(QStringLiteral("bottle"), m_bottlePts);
-        setLast(tr("Bottle accepted  +%1").arg(m_bottlePts));
+        // Small vs large bottle scoring comes from the remembered camera verdict.
+        const int pts = m_pendingLargeBottle ? m_largePts : m_smallPts;
+        if (m_pendingLargeBottle) ++m_largeBottles; else ++m_smallBottles;
+        m_pendingLargeBottle = false;
+        emit countsChanged();
+        emit itemAccepted(QStringLiteral("bottle"), pts);
+        setLast(tr("Bottle accepted  +%1").arg(pts));
     } else if (line.startsWith("EVT,DROPPED,CAN")) {
         ++m_cans; emit countsChanged();
         emit itemAccepted(QStringLiteral("can"), m_canPts);
         setLast(tr("Can accepted  +%1").arg(m_canPts));
     } else if (line.startsWith("EVT,REJECTED")) {
         ++m_rejected; emit countsChanged();
+        m_pendingLargeBottle = false;
         QString why = line.section(',', 2, 2);
         QString human =
             why == "BOTTLE_FULL" ? tr("Bottle basket is full")

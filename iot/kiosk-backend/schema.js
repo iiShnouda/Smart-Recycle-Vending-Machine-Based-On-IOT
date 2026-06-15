@@ -7,8 +7,10 @@
 //
 // See DATABASE_SCHEMA.md (repo root) for the full schema.
 
-const DEFAULT_POINT_VALUE_EGP = 0.05; // 1 point = 0.05 EGP — change here (dev only)
-const DEFAULT_RECYCLE_REWARDS = { bottle: 10, can: 10 };
+const DEFAULT_POINT_VALUE_EGP = 0.4;  // 1 point = 0.4 EGP — change here (dev only)
+// Recycle rewards (points per accepted item). Bottles split by size at the
+// kiosk via the camera: small bottle = 1, large bottle = 2, can = 2.
+const DEFAULT_RECYCLE_REWARDS = { smallBottle: 1, largeBottle: 2, can: 2 };
 
 async function initSchema(db) {
   // One conflicting/pre-existing index must NOT abort the whole init (which

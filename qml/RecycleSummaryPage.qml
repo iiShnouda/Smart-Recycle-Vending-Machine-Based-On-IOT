@@ -133,7 +133,11 @@ Rectangle {
                                 anchors.horizontalCenter: parent.horizontalCenter
                             }
                             Text {
-                                text: summaryPage.plasticCount * RecycleSession.bottlePoints + " " + qsTr("pts")
+                                // Bottles mix small (1 pt) + large (2 pts); derive the
+                                // bottle contribution from the accurate session total.
+                                text: (summaryPage.totalPoints
+                                       - summaryPage.canCount * RecycleSession.canPoints)
+                                      + " " + qsTr("pts")
                                 color: "#0891B2"
                                 font.pixelSize: 20
                                 font.weight: Font.DemiBold
@@ -198,6 +202,17 @@ Rectangle {
                             color: "#1F2A1B"
                             font.pixelSize: 86
                             font.weight: Font.Black
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        // EGP equivalent — 1 point = 0.4 EGP.
+                        Text {
+                            text: { langTick; return "≈ " +
+                                    (summaryPage.totalPoints * RecycleSession.pointValueEGP).toFixed(2)
+                                    + " " + qsTr("EGP") }
+                            color: "#16A34A"
+                            font.pixelSize: 26
+                            font.weight: Font.DemiBold
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                     }
