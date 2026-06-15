@@ -196,8 +196,8 @@ Rectangle {
                         Text {
                             anchors.centerIn: parent
                             text: !isActive ? qsTr("OFF")
-                                : count > 0  ? "✓ " + count
-                                             : qsTr("EMPTY")
+                                : count > 0  ? qsTr("IN STOCK")
+                                             : qsTr("OUT")
                             color: "#FFFFFF"
                             font.pixelSize: 14; font.weight: Font.ExtraBold
                         }
@@ -250,6 +250,8 @@ Rectangle {
                         // A fresh slot defaults to Active — you're adding a
                         // product because you want customers to see it.
                         editActive.checked = isEmpty ? true : isActive
+                        editInStock.checked = count > 0          // default OUT of stock
+                        editDialog.nameCandidates = []
                         editDialog.open()
                     }
                 }
@@ -263,28 +265,36 @@ Rectangle {
         title: qsTr("Slot ") + page.editingSlot
         parent: Overlay.overlay
         anchors.centerIn: parent
-        // Sized for 1080-wide kiosk; tall enough for calibration block.
         width: 880
-        height: 1200
+        height: 860
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape
         Overlay.modal: Rectangle { color: "#B0000000" }
         standardButtons: Dialog.Save | Dialog.Cancel
 
-        // Refresh the cached calibration whenever the model fires a change,
-        // so the "Live reading" row updates in real time as scans roll in.
-        property int liveRaw:      page.editingSlot >= 1 ? ProductsModel.lastRaw(page.editingSlot) : 0
-        property int emptyShelf:   page.editingSlot >= 1 ? ProductsModel.emptyShelfRaw(page.editingSlot) : 0
-        property int unitWeight:   page.editingSlot >= 1 ? ProductsModel.unitWeightRaw(page.editingSlot) : 0
-
+        // Inline product search (Open Food Facts) as the admin types the name.
+        property var  nameCandidates: []
+        property bool nameSearching: false
+        Timer {
+            id: nameSearch
+            interval: 700; repeat: false
+            onTriggered: {
+                if (editName.text.trim().length >= 3) {
+                    editDialog.nameSearching = true
+                    OffClient.search(editName.text)
+                }
+            }
+        }
         Connections {
-            target: ProductsModel
-            function onDataChanged() {
-                if (page.editingSlot < 1) return
-                editDialog.liveRaw    = ProductsModel.lastRaw(page.editingSlot)
-                editDialog.emptyShelf = ProductsModel.emptyShelfRaw(page.editingSlot)
-                editDialog.unitWeight = ProductsModel.unitWeightRaw(page.editingSlot)
+            target: OffClient
+            function onResults(query, list) {
+                editDialog.nameSearching = false
+                editDialog.nameCandidates = list
+            }
+            function onSearchFailed(q, r) {
+                editDialog.nameSearching = false
+                editDialog.nameCandidates = []
             }
         }
 
@@ -292,38 +302,48 @@ Rectangle {
             anchors.fill: parent
             spacing: 14
 
-            // ── Pick-from-catalog shortcut ───────────────────────────────
-            // This is the new "configure-once, reuse-everywhere" entry
-            // point. Tap → catalog opens → pick → fields below auto-fill,
-            // including the per-item weight if the catalog entry has one.
-            Rectangle {
-                width: parent.width; height: 80; radius: 16
-                color: "#0891B2"
-                TapHandler { onTapped: catalogPicker.open() }
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 12
-                    Text { text: "📚"; font.pixelSize: 30
-                           anchors.verticalCenter: parent.verticalCenter }
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 0
-                        Text { text: qsTr("Pick from catalog")
-                               color: "#FFFFFF"
-                               font.pixelSize: 20; font.weight: Font.ExtraBold }
-                        Text { text: qsTr("Reuse a product you've already configured")
-                               color: "#A5F3FC"
-                               font.pixelSize: 13 }
-                    }
-                }
-            }
-
-            Text { text: qsTr("Name"); font.pixelSize: 16; color: "#5A6B52" }
+            Text { text: qsTr("Name  (type to search products)")
+                   font.pixelSize: 16; color: "#5A6B52" }
             TextField {
                 id: editName
                 width: parent.width
-                placeholderText: qsTr("e.g. Cola 330ml")
+                placeholderText: qsTr("e.g. Coca Cola 330ml")
                 font.pixelSize: 22
+                onTextChanged: nameSearch.restart()
+            }
+
+            // Inline suggestions with images — tap one to fill name + image.
+            Rectangle {
+                visible: editDialog.nameCandidates.length > 0
+                width: parent.width; height: 150; radius: 12
+                color: "#FAFBF6"; border.width: 1; border.color: "#D8E0CF"
+                ListView {
+                    anchors.fill: parent; anchors.margins: 8
+                    orientation: ListView.Horizontal; spacing: 8; clip: true
+                    model: editDialog.nameCandidates
+                    delegate: Rectangle {
+                        width: 120; height: 130; radius: 10; color: "#FFFFFF"
+                        border.width: 1; border.color: "#D8E0CF"
+                        Column {
+                            anchors.fill: parent; anchors.margins: 6; spacing: 4
+                            Image { width: parent.width; height: 78
+                                    source: modelData.imageUrl
+                                    fillMode: Image.PreserveAspectFit
+                                    visible: modelData.imageUrl }
+                            Text { text: modelData.name; width: parent.width
+                                   color: "#1F2A1B"; font.pixelSize: 10
+                                   elide: Text.ElideRight; maximumLineCount: 2
+                                   wrapMode: Text.WordWrap }
+                        }
+                        TapHandler {
+                            onTapped: {
+                                editName.text  = modelData.name
+                                editImage.text = modelData.imageUrl
+                                editDialog.nameCandidates = []
+                            }
+                        }
+                    }
+                }
             }
 
             Text { text: qsTr("Price (points)"); font.pixelSize: 16; color: "#5A6B52" }
@@ -366,216 +386,10 @@ Rectangle {
                 font.pixelSize: 18
             }
 
-            // ── Calibration block ─────────────────────────────────────
-            // IMPORTANT UX note: this block is ONE-TIME per product. Normal
-            // restocks need no buttons here — open the door, add items, close
-            // the door, the auto-scanner handles the count. We only set
-            // these two numbers when (a) configuring a slot for the first
-            // time or (b) swapping to a different product that has a
-            // different per-item weight.
-            //
-            // When the slot is already calibrated we collapse to a small
-            // status row + an "Update calibration" disclosure that reveals
-            // the full controls. Avoids making restock look like work.
-            Rectangle {
-                width: parent.width
-                height: showCalControls ? 420 : 110
-                Behavior on height { NumberAnimation { duration: 150 } }
-                radius: 16
-                color: "#FAFBF6"
-                border.width: 2; border.color: "#D8E0CF"
-
-                // Disclosure state: open automatically for uncalibrated slots,
-                // collapsed by default once everything's set.
-                property bool showCalControls: editDialog.unitWeight <= 0
-
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    spacing: 10
-
-                    // ── Status row (always visible) ──────────────────────
-                    Row {
-                        width: parent.width
-                        spacing: 14
-
-                        Rectangle {
-                            width: 60; height: 60; radius: 30
-                            color: editDialog.unitWeight > 0 ? "#16A34A" : "#DC2626"
-                            anchors.verticalCenter: parent.verticalCenter
-                            Text { anchors.centerIn: parent
-                                   text: editDialog.unitWeight > 0 ? "⚖" : "!"
-                                   color: "#FFFFFF"
-                                   font.pixelSize: 30; font.weight: Font.Black }
-                        }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 60 - 200 - 28
-                            spacing: 2
-                            Text { text: editDialog.unitWeight > 0
-                                         ? qsTr("Scale is calibrated for this product")
-                                         : qsTr("Scale not calibrated yet")
-                                   color: "#1F2A1B"
-                                   font.pixelSize: 18; font.weight: Font.ExtraBold }
-                            Text {
-                                text: editDialog.unitWeight > 0
-                                      ? qsTr("Auto-counts on every restock. Live reading: %1 raw  →  %2 items")
-                                          .arg(editDialog.liveRaw).arg(
-                                              Math.max(0, Math.round(
-                                                  (editDialog.liveRaw - editDialog.emptyShelf)
-                                                  / editDialog.unitWeight)))
-                                      : qsTr("Run this once. After that, just open the door, add items, close it.")
-                                color: "#5A6B52"
-                                font.pixelSize: 13
-                                wrapMode: Text.WordWrap
-                                width: parent.width
-                            }
-                        }
-                        Rectangle {
-                            width: 200; height: 56; radius: 28
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: parent.parent.parent.showCalControls ? "#9CA3AF" : "#0891B2"
-                            TapHandler {
-                                onTapped: parent.parent.parent.parent.showCalControls =
-                                              !parent.parent.parent.parent.showCalControls
-                            }
-                            Text { anchors.centerIn: parent
-                                   text: parent.parent.parent.parent.showCalControls
-                                         ? qsTr("Hide") : qsTr("Update calibration")
-                                   color: "#FFFFFF"
-                                   font.pixelSize: 15; font.weight: Font.ExtraBold }
-                        }
-                    }
-
-                    // ── Detail panel (only shown when expanded) ──────────
-                    Rectangle {
-                        visible: parent.parent.showCalControls
-                        width: parent.width; height: 1; color: "#E5E7EB"
-                    }
-
-                    Column {
-                        visible: parent.parent.showCalControls
-                        width: parent.width
-                        spacing: 12
-
-                        // Big info banner — only shown when calibrating
-                        Rectangle {
-                            width: parent.width; height: 56; radius: 12
-                            color: "#FEF3C7"
-                            border.width: 1; border.color: "#FBBF24"
-                            Text {
-                                anchors.centerIn: parent
-                                anchors.margins: 12
-                                width: parent.width - 24
-                                text: qsTr("Only do this when setting up a new product. Restocks are automatic.")
-                                color: "#92400E"
-                                font.pixelSize: 13; font.weight: Font.Bold
-                                horizontalAlignment: Text.AlignHCenter
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-
-                        // Live readings strip
-                        Row {
-                            spacing: 24
-                            width: parent.width
-                            Column {
-                                spacing: 2
-                                Text { text: qsTr("Live"); color: "#5A6B52"; font.pixelSize: 11 }
-                                Text { text: editDialog.liveRaw
-                                       color: "#1F2A1B"
-                                       font.pixelSize: 20; font.weight: Font.Black }
-                            }
-                            Column {
-                                spacing: 2
-                                Text { text: qsTr("Empty tare"); color: "#5A6B52"; font.pixelSize: 11 }
-                                Text { text: editDialog.emptyShelf
-                                       color: "#1F2A1B"
-                                       font.pixelSize: 20; font.weight: Font.Black }
-                            }
-                            Column {
-                                spacing: 2
-                                Text { text: qsTr("Per item"); color: "#5A6B52"; font.pixelSize: 11 }
-                                Text { text: editDialog.unitWeight
-                                       color: "#1F2A1B"
-                                       font.pixelSize: 20; font.weight: Font.Black }
-                            }
-                        }
-
-                        // Action 1: tare empty shelf
-                        Row {
-                            spacing: 14
-                            width: parent.width
-                            Column {
-                                width: parent.width - 220
-                                spacing: 2
-                                Text { text: qsTr("A.  Empty the shelf, then tap →")
-                                       color: "#1F2A1B"
-                                       font.pixelSize: 15; font.weight: Font.Bold }
-                                Text { text: qsTr("Captures the zero reading for this slot.")
-                                       color: "#5A6B52"
-                                       font.pixelSize: 11
-                                       wrapMode: Text.WordWrap; width: parent.width }
-                            }
-                            Rectangle {
-                                width: 200; height: 50; radius: 25
-                                color: "#0891B2"
-                                TapHandler {
-                                    onTapped: ProductsModel.calibrateEmptyShelf(
-                                                  page.editingSlot, editDialog.liveRaw)
-                                }
-                                Text { anchors.centerIn: parent; text: qsTr("Tare = 0")
-                                       color: "#FFFFFF"
-                                       font.pixelSize: 17; font.weight: Font.ExtraBold }
-                            }
-                        }
-
-                        // Action 2: per-item weight
-                        Row {
-                            spacing: 14
-                            width: parent.width
-                            Column {
-                                width: parent.width - 220 - 110 - 28
-                                spacing: 2
-                                Text { text: qsTr("B.  Place N items, type N, tap Set →")
-                                       color: "#1F2A1B"
-                                       font.pixelSize: 15; font.weight: Font.Bold }
-                                Text { text: qsTr("Tells the system how heavy one item is.")
-                                       color: "#5A6B52"
-                                       font.pixelSize: 11
-                                       wrapMode: Text.WordWrap; width: parent.width }
-                            }
-                            TextField {
-                                id: knownCountField
-                                width: 110; height: 50
-                                placeholderText: "N"
-                                inputMethodHints: Qt.ImhDigitsOnly
-                                validator: IntValidator { bottom: 1; top: 9999 }
-                                font.pixelSize: 20
-                                horizontalAlignment: TextInput.AlignHCenter
-                            }
-                            Rectangle {
-                                width: 200; height: 50; radius: 25
-                                color: knownCountField.acceptableInput ? "#16A34A" : "#9CA3AF"
-                                TapHandler {
-                                    enabled: knownCountField.acceptableInput
-                                    onTapped: {
-                                        const n = parseInt(knownCountField.text || "0")
-                                        if (n > 0) {
-                                            ProductsModel.calibrateUnitWeight(
-                                                page.editingSlot,
-                                                editDialog.liveRaw, n)
-                                            knownCountField.text = ""
-                                        }
-                                    }
-                                }
-                                Text { anchors.centerIn: parent; text: qsTr("Set per-item")
-                                       color: "#FFFFFF"
-                                       font.pixelSize: 17; font.weight: Font.ExtraBold }
-                            }
-                        }
-                    }
-                }
+            CheckBox {
+                id: editInStock
+                text: qsTr("In stock (available to buy)")
+                font.pixelSize: 18
             }
         }
 
@@ -587,15 +401,8 @@ Rectangle {
                 editImage.text,
                 editActive.checked
             )
-            // If this slot still isn't calibrated, gently offer to do the
-            // one-time scale calibration so it AUTO-counts (no manual entry).
-            // Until then the slot is assumed in-stock so it can still be sold.
-            var nm = editName.text
-            if (nm.length > 0 && ProductsModel.unitWeightRaw(page.editingSlot) <= 0) {
-                calibratePrompt.slotNo   = page.editingSlot
-                calibratePrompt.prodName = nm
-                calibratePrompt.open()
-            }
+            ProductsModel.setInStock(page.editingSlot, editInStock.checked)
+            ProductsModel.reload()
         }
     }
 

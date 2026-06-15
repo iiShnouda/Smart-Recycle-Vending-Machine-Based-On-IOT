@@ -276,10 +276,9 @@ Rectangle {
                 function onModelReset()  { refresh() }
             }
 
-            // A calibrated slot uses the live load-cell count; an uncalibrated
-            // slot can't be measured, so we assume it's in stock (sellable)
-            // rather than blocking it — keeps things automatic, no manual entry.
-            readonly property bool inStock:  pcalibrated ? (pcount > 0) : true
+            // Stock is set by the admin's In-stock toggle (count > 0). New
+            // products default to out of stock until the admin marks them in.
+            readonly property bool inStock:  pcount > 0
             readonly property bool isActive: pactive === true || pactive === 1
             readonly property bool canBuy:   isActive && inStock
             readonly property bool tooPoor:  canBuy && (vendingPage.userPoints - vendingPage.cartTotal()) < pprice

@@ -58,6 +58,11 @@ public slots:
      *  to auto-disable a product after a fault.                          */
     Q_INVOKABLE bool setActive(int slot, bool active);
 
+    /** Admin "in stock" toggle. Sets the stock count directly (no load cell):
+     *  in stock -> a positive count, out -> 0. Vending shows a slot as
+     *  buyable when count > 0.                                            */
+    Q_INVOKABLE bool setInStock(int slot, bool inStock);
+
     /** Apply a raw HX711 reading from the InventoryScanner. Re-computes
      *  the count using stored calibration constants; logs a restock_events
      *  row if the count changed since last scan. Returns the new count.  */

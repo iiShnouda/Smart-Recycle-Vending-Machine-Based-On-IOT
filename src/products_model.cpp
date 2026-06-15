@@ -136,6 +136,18 @@ bool ProductsModel::setActive(int slot, bool active)
     return ok;
 }
 
+bool ProductsModel::setInStock(int slot, bool inStock)
+{
+    if (!m_db || slot < 1 || slot > 8) return false;
+    const int count = inStock ? 99 : 0;     // simple admin stock, no load cell
+    Row &r = m_rows[slot - 1];
+    r.count = count;
+    m_db->setProductCount(slot, count, r.weightG);
+    const QModelIndex idx = index(slot - 1);
+    emit dataChanged(idx, idx, { RoleCount });
+    return true;
+}
+
 int ProductsModel::ingestRawReading(int slot, int raw, const QString &source)
 {
     if (slot < 1 || slot > 8) return -1;
