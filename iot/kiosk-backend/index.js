@@ -16,8 +16,14 @@ require('dotenv').config();
 // work. See iot/kiosk-backend/.env.example.
 const mqtt    = require('mqtt');
 const express = require('express');
+const cors    = require('cors');
+const bcrypt  = require('bcryptjs');
+const jwt     = require('jsonwebtoken');
 const { MongoClient } = require('mongodb');
 const { initSchema, getConfig, DEFAULT_POINT_VALUE_EGP } = require('./schema');
+
+// Shared secret for signing app login tokens. Set JWT_SECRET in the env.
+const JWT_SECRET = process.env.JWT_SECRET || 'rewingo-dev-secret-change-me';
 
 const {
   MQTT_HOST,
@@ -159,7 +165,74 @@ function sendUserToMachine(machineId, user) {
 
 // ── HTTP API (the phone app calls this after scanning a kiosk QR) ─────────
 const app = express();
+app.use(cors());            // the phone app calls this from anywhere
 app.use(express.json());
+
+// ── App accounts (shared with the kiosk) ──────────────────────────────────
+// These endpoints make the phone app use the SAME MongoDB `users` collection as
+// the kiosk, so one account works on both. The mobile app's BackendAuthService
+// already calls /api/auth/register|login|me — point it at THIS backend.
+
+function publicUser(u) {
+  return {
+    id: String(u._id), _id: String(u._id),
+    firstName: u.firstName || (u.name || '').split(' ')[0] || '',
+    lastName:  u.lastName  || (u.name || '').split(' ').slice(1).join(' ') || '',
+    age: u.age || 0, email: u.email || '', mobile: u.mobile || '',
+    points: u.points || 0, role: u.role || 'user',
+  };
+}
+
+app.post('/api/auth/register', async (req, res) => {
+  if (!db) return res.status(503).json({ message: 'database unavailable' });
+  const { firstName, lastName, age, email, password, mobile } = req.body || {};
+  if (!email || !password) return res.status(400).json({ message: 'email and password are required' });
+  try {
+    const existing = await db.collection('users').findOne({ email: email.toLowerCase() });
+    if (existing) return res.status(409).json({ message: 'email already registered' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const now = new Date();
+    const doc = {
+      firstName: firstName || '', lastName: lastName || '', age: age || 0,
+      name: [firstName, lastName].filter(Boolean).join(' '),
+      email: email.toLowerCase(), mobile: mobile || null, passwordHash,
+      role: 'user', points: 0,
+      recycle: { bottles: 0, cans: 0, total: 0 },
+      createdAt: now, updatedAt: now,
+    };
+    const r = await db.collection('users').insertOne(doc);
+    doc._id = r.insertedId;
+    const token = jwt.sign({ uid: String(doc._id) }, JWT_SECRET, { expiresIn: '30d' });
+    res.status(201).json({ token, ...publicUser(doc) });
+  } catch (e) { console.error('[auth] register:', e.message); res.status(500).json({ message: 'register failed' }); }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  if (!db) return res.status(503).json({ message: 'database unavailable' });
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ message: 'email and password are required' });
+  try {
+    const u = await db.collection('users').findOne({ email: email.toLowerCase() });
+    if (!u || !u.passwordHash || !(await bcrypt.compare(password, u.passwordHash)))
+      return res.status(401).json({ message: 'invalid email or password' });
+    const token = jwt.sign({ uid: String(u._id) }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, ...publicUser(u) });
+  } catch (e) { console.error('[auth] login:', e.message); res.status(500).json({ message: 'login failed' }); }
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  if (!db) return res.status(503).json({ message: 'database unavailable' });
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ message: 'no token' });
+  try {
+    const { uid } = jwt.verify(token, JWT_SECRET);
+    const { ObjectId } = require('mongodb');
+    const u = await db.collection('users').findOne({ _id: new ObjectId(uid) });
+    if (!u) return res.status(404).json({ message: 'user not found' });
+    res.json(publicUser(u));
+  } catch (e) { res.status(401).json({ message: 'invalid token' }); }
+});
 
 app.get('/health', (_req, res) =>
   res.json({ ok: true, mqtt: mq.connected, mongo: !!db }));
