@@ -49,6 +49,21 @@ Dialog {
         previewImage.source = ""
     }
 
+    // Auto-search: a short pause after the admin stops typing fires the
+    // lookup automatically, so they "just type the name and images appear"
+    // — no button press, no URLs. The manual button stays as a fallback.
+    Timer {
+        id: autoSearch
+        interval: 700; repeat: false
+        onTriggered: {
+            if (nameField.text.trim().length >= 3 && !dlg.searching) {
+                dlg.searching  = true
+                dlg.candidates = []
+                OffClient.search(nameField.text)
+            }
+        }
+    }
+
     // ── OFF lookup hookup ─────────────────────────────────────────────────
     Connections {
         target: OffClient
@@ -77,6 +92,7 @@ Dialog {
                 width: parent.width - 220
                 placeholderText: qsTr("e.g. Coca Cola 330ml")
                 font.pixelSize: 20
+                onTextChanged: autoSearch.restart()   // images appear as you type
             }
             Rectangle {
                 width: 210; height: 56; radius: 28
