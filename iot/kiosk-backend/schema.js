@@ -11,35 +11,42 @@ const DEFAULT_POINT_VALUE_EGP = 0.05; // 1 point = 0.05 EGP — change here (dev
 const DEFAULT_RECYCLE_REWARDS = { bottle: 10, can: 10 };
 
 async function initSchema(db) {
-  await db.collection('users').createIndex({ mobile: 1 }, { unique: true, sparse: true });
-  await db.collection('users').createIndex({ email: 1 }, { sparse: true });
-  await db.collection('users').createIndex({ appUserId: 1 }, { sparse: true });
+  // One conflicting/pre-existing index must NOT abort the whole init (which
+  // would null the DB connection). Each createIndex is best-effort.
+  const idx = async (coll, keys, opts) => {
+    try { await db.collection(coll).createIndex(keys, opts || {}); }
+    catch (e) { console.warn(`[schema] skip index ${coll} ${JSON.stringify(keys)}: ${e.message}`); }
+  };
 
-  await db.collection('product_catalog').createIndex({ name: 1 });
-  await db.collection('product_catalog').createIndex({ barcode: 1 }, { sparse: true });
-
-  await db.collection('products').createIndex({ machineId: 1, slot: 1 }, { unique: true });
-
-  await db.collection('transactions').createIndex({ machineId: 1, ts: -1 });
-  await db.collection('transactions').createIndex({ userId: 1, ts: -1 });
-  await db.collection('transactions').createIndex({ ts: -1 });
-
-  await db.collection('pending_accounts').createIndex({ token: 1 }, { unique: true });
+  await idx('users', { mobile: 1 }, { unique: true, sparse: true });
+  await idx('users', { email: 1 }, { sparse: true });
+  await idx('users', { appUserId: 1 }, { sparse: true });
+  await idx('product_catalog', { name: 1 });
+  await idx('product_catalog', { barcode: 1 }, { sparse: true });
+  await idx('products', { machineId: 1, slot: 1 }, { unique: true });
+  await idx('transactions', { machineId: 1, ts: -1 });
+  await idx('transactions', { userId: 1, ts: -1 });
+  await idx('transactions', { ts: -1 });
+  await idx('pending_accounts', { token: 1 }, { unique: true });
 
   // Seed config only if absent — never clobber a dev-set pointValueEGP.
-  await db.collection('config').updateOne(
-    { _id: 'global' },
-    {
-      $setOnInsert: {
-        _id: 'global',
-        pointValueEGP: DEFAULT_POINT_VALUE_EGP,
-        currency: 'EGP',
-        recycleRewards: DEFAULT_RECYCLE_REWARDS,
-        updatedBy: 'seed',
-        updatedAt: new Date(),
+  try {
+    await db.collection('config').updateOne(
+      { _id: 'global' },
+      {
+        $setOnInsert: {
+          _id: 'global',
+          pointValueEGP: DEFAULT_POINT_VALUE_EGP,
+          currency: 'EGP',
+          recycleRewards: DEFAULT_RECYCLE_REWARDS,
+          updatedBy: 'seed',
+          updatedAt: new Date(),
+        },
       },
-    },
-    { upsert: true });
+      { upsert: true });
+  } catch (e) {
+    console.warn('[schema] config seed:', e.message);
+  }
 
   console.log('[schema] indexes ensured + config seeded');
 }
