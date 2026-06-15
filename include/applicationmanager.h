@@ -83,6 +83,10 @@ public slots:
 
     Q_INVOKABLE void setKioskName(const QString &name);
 
+    /** This kiosk's LAN IP (first non-loopback IPv4), e.g. "192.168.1.50".
+     *  Shown in the admin panel so you can point the mobile app at it.    */
+    Q_INVOKABLE QString localIp() const;
+
     // ---- Dispense fault inspection (called by AdminFaultsPage) ----
     /** Newest faults first; limit defaults to 100.                       */
     Q_INVOKABLE QVariantList dispenseFaults(int limit = 100);

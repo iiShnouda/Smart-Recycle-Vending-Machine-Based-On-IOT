@@ -28,6 +28,8 @@
 #include <QDir>
 #include <QFile>
 #include <QProcess>
+#include <QNetworkInterface>
+#include <QHostAddress>
 #include <QSettings>
 #include <QUuid>
 
@@ -469,6 +471,27 @@ void ApplicationManager::setKioskName(const QString &name)
     m_kioskName = name;
     QSettings().setValue("kiosk/name", name);
     emit kioskNameChanged();
+}
+
+QString ApplicationManager::localIp() const
+{
+    // First non-loopback, running IPv4 address — what the phone uses to reach
+    // the kiosk-backend on this Pi. Prefer wlan/eth over virtual interfaces.
+    const auto ifaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface &iface : ifaces) {
+        const auto flags = iface.flags();
+        if (!(flags & QNetworkInterface::IsUp) ||
+            !(flags & QNetworkInterface::IsRunning) ||
+            (flags & QNetworkInterface::IsLoopBack))
+            continue;
+        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+            const QHostAddress ip = entry.ip();
+            if (ip.protocol() == QAbstractSocket::IPv4Protocol &&
+                !ip.isLoopback())
+                return ip.toString();
+        }
+    }
+    return QStringLiteral("unavailable");
 }
 
 // =========================================================================
