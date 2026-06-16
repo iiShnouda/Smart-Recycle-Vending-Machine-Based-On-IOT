@@ -20,7 +20,21 @@ async function initSchema(db) {
     catch (e) { console.warn(`[schema] skip index ${coll} ${JSON.stringify(keys)}: ${e.message}`); }
   };
 
-  await idx('users', { mobile: 1 }, { unique: true, sparse: true });
+  // mobile must be unique only for REAL phone numbers. A plain `sparse`
+  // unique index still rejects a 2nd user with mobile:null (register saves
+  // null when no phone is given) → signup 500s. Use a PARTIAL index instead,
+  // and self-heal an older non-partial `mobile_1` if one already exists.
+  try {
+    const existing = await db.collection('users').indexes();
+    const m = existing.find(i => i.name === 'mobile_1');
+    if (m && !m.partialFilterExpression) {
+      await db.collection('users').dropIndex('mobile_1');
+      console.log('[schema] dropped non-partial mobile_1');
+    }
+  } catch (e) { console.warn('[schema] mobile index check:', e.message); }
+  await idx('users', { mobile: 1 },
+    { unique: true, name: 'mobile_1',
+      partialFilterExpression: { mobile: { $type: 'string' } } });
   await idx('users', { email: 1 }, { sparse: true });
   await idx('users', { appUserId: 1 }, { sparse: true });
   await idx('product_catalog', { name: 1 });
