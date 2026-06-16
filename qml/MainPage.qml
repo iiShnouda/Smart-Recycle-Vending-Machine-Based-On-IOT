@@ -12,6 +12,7 @@ Rectangle {
 
     // User info — wire from your auth flow
     property string userName: "Shnouda"
+    property string userId: ""        // carried from face login / registration
     property int userPoints: 0
 
     property int langTick: 0

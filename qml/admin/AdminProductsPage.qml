@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../../components"   // CameraPreview lives here (not a global module type)
 
 /*
  * AdminProductsPage — manage the 8 vending slots.
@@ -727,6 +728,9 @@ Rectangle {
                         circular: false
                         cornerRadius: 18
                         fps: 12
+                        // Only pump frames while actually scanning — keeps the
+                        // dialog (created with the page) idle until opened.
+                        active: scanDialog.phase === "scanning"
                     }
                     // Aiming guide line down the middle.
                     Rectangle { anchors.centerIn: parent; width: parent.width * 0.8

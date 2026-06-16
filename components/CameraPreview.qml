@@ -19,6 +19,12 @@ Item {
     property int   fps: 12
     property bool  circular: true         // false → rectangular (e.g. barcode)
     property int   cornerRadius: 18       // used only when !circular
+    // Gate the frame pump. Default true keeps the always-on face pages working,
+    // but the barcode scan dialog (created with its page, shown only while
+    // scanning) sets this false so it doesn't churn the image provider 12×/sec
+    // in the background — that stutter made the Products page feel like it
+    // wouldn't open and made admin back-navigation janky.
+    property bool  active: true
 
     property int tick: 0
     property Item frontImg: imgA
@@ -50,7 +56,7 @@ Item {
     }
 
     Timer {
-        interval: Math.max(40, 1000 / root.fps); running: true; repeat: true
+        interval: Math.max(40, 1000 / root.fps); running: root.active; repeat: true
         onTriggered: {
             var back = (root.frontImg === imgA) ? imgB : imgA
             back.source = "image://facepreview/" + (++root.tick)

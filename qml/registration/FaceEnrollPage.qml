@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../../components"   // CameraPreview lives here (not a global module type)
 
 /*
  * FaceEnrollPage — self-capture face registration.
