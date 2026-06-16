@@ -34,12 +34,17 @@ Rectangle {
     // optional). The C++ enroll(name) just forwards the string, so no C++
     // change is needed to carry the number through.
     Component.onCompleted: {
-        FaceFrame.start()        // live preview (C++ feeds frames as data URLs)
         FaceRec.enroll(
             newUserMobile.length > 0 ? newUserName + "\t" + newUserMobile : newUserName)
     }
-    Component.onDestruction: { FaceRec.cancel(); FaceFrame.stop() }
-    StackView.onDeactivated:  { FaceRec.cancel(); FaceFrame.stop() }
+    Component.onDestruction: FaceRec.cancel()
+    StackView.onDeactivated:  FaceRec.cancel()
+
+    // Reload the preview via the C++ image provider (off-GUI-thread decode).
+    Timer {
+        interval: 90; running: true; repeat: true
+        onTriggered: page.previewTick++
+    }
 
     Connections {
         target: FaceRec
@@ -143,9 +148,9 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                // Live frame as a base64 data URL fed from C++ (FaceFrame) —
-                // reliably renders where file:// / image:// stayed blank.
-                source: FaceFrame.frame
+                asynchronous: true
+                // Live frame via the C++ image provider (off-GUI-thread decode).
+                source: "image://facepreview/" + previewTick
             }
 
             // …turned into a CIRCLE: paint the page background over the corners

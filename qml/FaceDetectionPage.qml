@@ -32,12 +32,19 @@ Rectangle {
     // ── Lifecycle: the sidecar owns the camera now ───────────────
     Component.onCompleted: {
         Idle.touch()
-        FaceFrame.start()        // live preview (C++ feeds frames as data URLs)
         FaceRec.identify()
     }
-    Component.onDestruction: { FaceRec.cancel(); FaceFrame.stop() }
+    Component.onDestruction: FaceRec.cancel()
     StackView.onActivated:   Idle.touch()
-    StackView.onDeactivated: { FaceRec.cancel(); FaceFrame.stop() }
+    StackView.onDeactivated: FaceRec.cancel()
+
+    // Reload the preview via the C++ image provider (decodes off the GUI
+    // thread — smoother than the base64 data-URL feeder, which encoded on the
+    // GUI thread and made it laggy).
+    Timer {
+        interval: 90; running: true; repeat: true
+        onTriggered: page.previewTick++
+    }
 
     // ── FaceRec events ───────────────────────────────────────────
     Connections {
@@ -147,14 +154,13 @@ Rectangle {
 
             Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
 
-            // Live frame (base64 data URL fed from C++) — shown always so the
-            // face stays visible; not gated on status.
+            // Live frame via the C++ image provider (off-GUI-thread decode).
             Image {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                asynchronous: false
-                source: FaceFrame.frame
+                asynchronous: true
+                source: "image://facepreview/" + previewTick
             }
 
             // Mask the square frame into a circle (rect minus circle, evenodd).
