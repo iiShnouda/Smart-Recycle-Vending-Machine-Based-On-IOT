@@ -3,6 +3,7 @@
 #include "../include/logger.h"
 
 #include <QProcess>
+#include <QSettings>
 #include <QUrl>
 #include <QUuid>
 #include <QJsonDocument>
@@ -30,7 +31,9 @@ MachineLink::~MachineLink()
 
 void MachineLink::configure(const QString &machineId)
 {
-    m_machineId = machineId;
+    if (!machineId.isEmpty())
+        m_machineId = machineId;
+    m_configured = true;
 
     // Hook onto the shared MQTT client. The backend publishes the linked
     // user to rewingo/<machineId>/login, which MqttClient subscribes to on
@@ -52,7 +55,26 @@ void MachineLink::configure(const QString &machineId)
 
 void MachineLink::beginQrSession()
 {
+    // Resilience: if configure() never reached THIS (QML-singleton) instance,
+    // the QR id is empty ("REWINGO::<token>" → the phone rejects it as
+    // "invalid / out of date") AND the MQTT login hookup is missing (so the
+    // phone's sign-in never reaches us). Configure now from the persisted id
+    // so the instance QML actually drives is fully wired.
+    if (!m_configured) {
+        QSettings s;
+        configure(s.value(QStringLiteral("kiosk/id")).toString());
+        Logger::warn("MachineLink",
+                     "self-configured at QR time (configure() never reached "
+                     "this instance) — machineId=" + m_machineId);
+    }
+
     m_sessionActive = true;
+
+    // Final guard: the QR MUST carry the kiosk id.
+    if (m_machineId.isEmpty()) {
+        QSettings s;
+        m_machineId = s.value(QStringLiteral("kiosk/id")).toString();
+    }
 
     // Discord-style: a fresh random token every time the QR screen opens, so
     // each QR is unique and single-use. The phone scans

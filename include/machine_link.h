@@ -76,6 +76,7 @@ private:
     QString m_state         = QStringLiteral("idle");
     bool    m_connected     = false;
     bool    m_sessionActive = false;
+    bool    m_configured    = false;   // configure() has run on THIS instance
 };
 
 #endif // MACHINE_LINK_H
