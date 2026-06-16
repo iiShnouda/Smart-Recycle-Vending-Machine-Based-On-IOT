@@ -137,23 +137,38 @@ Rectangle {
             scanLine: status === 0
         }
 
-        Rectangle {
+        // Circular preview via a "donut" mask (paint the page bg over the
+        // corners). clip:true on a rounded Rectangle renders BLANK on the Pi
+        // GPU — this is the same technique the enroll page uses successfully.
+        Item {
             anchors.centerIn: parent
             width: parent.width  * 0.66
             height: parent.height * 0.66
-            radius: width / 2
-            color: "#1A1D1A"
-            clip: true
 
-            // The actual camera image, reloaded each tick. Empty source when
-            // we have a result so the ✓/✗ overlay shows on a clean disc.
+            Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
+
+            // Live frame (base64 data URL fed from C++) — shown always so the
+            // face stays visible; not gated on status.
             Image {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
                 asynchronous: false
-                // Live frame as a base64 data URL fed from C++ (FaceFrame).
-                source: status === 0 ? FaceFrame.frame : ""
+                source: FaceFrame.frame
+            }
+
+            // Mask the square frame into a circle (rect minus circle, evenodd).
+            Canvas {
+                anchors.fill: parent
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.fillStyle = page.color
+                    ctx.beginPath()
+                    ctx.rect(0, 0, width, height)
+                    ctx.arc(width / 2, height / 2, width / 2, 0, 2 * Math.PI, true)
+                    ctx.fill("evenodd")
+                }
             }
 
             Text {
@@ -165,34 +180,6 @@ Rectangle {
                 font.weight: Font.Black
                 style: Text.Outline
                 styleColor: "#FFFFFF"
-            }
-        }
-    }
-
-    // ── TEMP DIAGNOSTIC (remove once the preview is confirmed) ──────────
-    // A raw preview OUTSIDE the disc/ring + a readout, so we can see exactly
-    // where the blank comes from when testing on the actual screen.
-    Column {
-        z: 200
-        anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 10
-        spacing: 4
-        Rectangle {
-            width: 220; height: 165; color: "#000000"
-            border.width: 3; border.color: "#FF0000"
-            Image {
-                anchors.fill: parent; anchors.margins: 3
-                fillMode: Image.PreserveAspectFit
-                cache: false; asynchronous: false
-                source: FaceFrame.frame          // raw, not gated, not in a disc
-            }
-        }
-        Rectangle {
-            width: 220; height: 30; color: "#FFFFFF"
-            Text {
-                anchors.centerIn: parent
-                text: "len=" + (FaceFrame.frame ? FaceFrame.frame.length : -1)
-                      + "  status=" + status
-                color: "#000000"; font.pixelSize: 18; font.weight: Font.Black
             }
         }
     }
