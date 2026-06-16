@@ -174,6 +174,36 @@ void FaceRecSidecar::enroll(const QString &name)
     if (m_proc) m_proc->write((name + "\n").toUtf8());
 }
 
+void FaceRecSidecar::finalizeUser(int userId, const QString &name,
+                                  const QString &mobile)
+{
+    // The face is already enrolled (with a placeholder name). This just
+    // writes the real name/mobile onto that DB row. It's a quick one-shot
+    // sidecar (no camera), so it can run even right after enroll exits.
+    if (isRunning()) {
+        Logger::warn("FaceRec", "Busy — ignoring finalizeUser");
+        // Don't strand the caller: report done so the UI still advances.
+        emit finalized(userId);
+        return;
+    }
+    m_currentMode = QStringLiteral("finalize");
+    m_stage.clear();
+#ifdef Q_OS_WIN
+    // No Windows equivalent — the enroll already stored the typed name there.
+    emit finalized(userId);
+    return;
+#else
+    startSidecar({ "-u", "-m", "scripts.finalize_user" });
+    // finalize_user.py reads one stdin line: "user_id<TAB>name<TAB>mobile".
+    if (m_proc) {
+        const QString payload = QString::number(userId) + "\t" + name + "\t"
+                              + mobile + "\n";
+        m_proc->write(payload.toUtf8());
+        m_proc->closeWriteChannel();
+    }
+#endif
+}
+
 void FaceRecSidecar::cancel()
 {
     if (!m_proc || m_proc->state() == QProcess::NotRunning) return;
@@ -242,7 +272,11 @@ void FaceRecSidecar::onStdout()
             emit enrollProgressChanged();
         }
         else if (ev == "enrolled") {
-            emit enrolled(obj.value("name").toString());
+            emit enrolled(obj.value("name").toString(),
+                          obj.value("user_id").toInt());
+        }
+        else if (ev == "finalized") {
+            emit finalized(obj.value("user_id").toInt());
         }
         else if (ev == "identified") {
             emit identified(obj.value("name").toString(),

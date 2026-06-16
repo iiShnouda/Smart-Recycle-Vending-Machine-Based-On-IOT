@@ -131,8 +131,9 @@ Rectangle {
             width: 260; height: 90; radius: 45
             color: "#1A1D1A"
             TapHandler {
+                // Name-after-face: scan the face first, then collect name/mobile.
                 onTapped: stackView.replace(
-                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationDetailsPage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml")
             }
             Row {
                 anchors.centerIn: parent; spacing: 10

@@ -4,9 +4,11 @@ import Recycle_Vending_Machine_LCD
 
 /*
  * RegistrationDetailsPage — collects the new user's name + mobile number
- * before the face capture. The name is stored with the face so login greets
- * the real person ("Welcome <name>"); the mobile number keys the temp account
- * the phone app later claims. Uses the on-screen virtual keyboard.
+ * AFTER the face capture (name-after-face). The face is already enrolled with
+ * a placeholder name; here we write the real name/mobile onto that DB row via
+ * FaceRec.finalizeUser(userId, …) so login greets the real person
+ * ("Welcome <name>") and the mobile keys the temp account the phone app claims.
+ * Uses the on-screen virtual keyboard.
  */
 Rectangle {
     id: page
@@ -14,10 +16,32 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
+    // The user_id returned by the just-completed face enrollment.
+    property string newUserId: ""
+    // Held while we wait for finalizeUser to write the row.
+    property string pendingName: ""
+    property string pendingMobile: ""
+
     property int langTick: 0
     Connections {
         target: appManager
         function onLanguageChanged() { langTick++ }
+    }
+
+    // finalizeUser always answers (finalized on success, failed on error). In
+    // either case the face is already enrolled, so we continue to the success
+    // page — at worst the stored name stays the placeholder.
+    Connections {
+        target: FaceRec
+        function onFinalized(userId) { page.goComplete() }
+        function onFailed(reason)    { page.goComplete() }
+    }
+
+    function goComplete() {
+        stackView.replace(
+            "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
+            { userId: page.newUserId, userName: page.pendingName,
+              userMobile: page.pendingMobile })
     }
 
     function proceed() {
@@ -25,9 +49,11 @@ Rectangle {
         if (nm.length === 0) { err.text = qsTr("Please enter your name"); return }
         const mob = mobileField.text.trim()
         if (mob.length < 6)  { err.text = qsTr("Please enter a valid mobile number"); return }
-        stackView.replace(
-            "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml",
-            { newUserName: nm, newUserMobile: mob })
+        page.pendingName = nm
+        page.pendingMobile = mob
+        err.text = ""
+        saving.running = true
+        FaceRec.finalizeUser(parseInt(page.newUserId), nm, mob)
     }
 
     // Back
@@ -53,7 +79,7 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
         }
         Text {
-            text: { langTick; return qsTr("Enter your details, then we'll scan your face") }
+            text: { langTick; return qsTr("Your face is saved — now tell us who you are") }
             color: "#5A6B52"; font.pixelSize: 22
             anchors.horizontalCenter: parent.horizontalCenter
         }
@@ -117,12 +143,20 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             width: 320; height: 96; radius: 48
             color: "#1A1D1A"
-            TapHandler { onTapped: page.proceed() }
+            opacity: saving.running ? 0.6 : 1.0
+            TapHandler { enabled: !saving.running; onTapped: page.proceed() }
             Row {
                 anchors.centerIn: parent; spacing: 10
+                visible: !saving.running
                 Text { text: { langTick; return qsTr("Continue") }
                        color: "#FFFFFF"; font.pixelSize: 28; font.weight: Font.ExtraBold }
                 Text { text: "→"; color: "#00E5FF"; font.pixelSize: 28; font.weight: Font.Black }
+            }
+            BusyIndicator {
+                id: saving
+                anchors.centerIn: parent
+                running: false
+                visible: running
             }
         }
     }

@@ -66,6 +66,9 @@ public:
 public slots:
     Q_INVOKABLE void identify();
     Q_INVOKABLE void enroll(const QString &name);
+    /** Name-after-face: set the real name/mobile on a just-enrolled face. */
+    Q_INVOKABLE void finalizeUser(int userId, const QString &name,
+                                  const QString &mobile);
     Q_INVOKABLE void cancel();
     /** Pump one BGR/RGB camera frame into the sidecar. The kiosk's
      *  Camera owns the device; this just JPEG-encodes the frame and
@@ -79,7 +82,8 @@ signals:
     void enrollProgressChanged();
     void identified(const QString &name, double score);
     void unknown(double bestScore);
-    void enrolled(const QString &name);
+    void enrolled(const QString &name, int userId);
+    void finalized(int userId);
     void failed(const QString &reason);
 
 private slots:

@@ -18,11 +18,6 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    // Identity collected on RegistrationDetailsPage.
-    property string newUserId:     "u_" + Date.now()
-    property string newUserName:   "New User"
-    property string newUserMobile: ""
-
     property int langTick: 0
     property int previewTick: 0
     Connections {
@@ -30,23 +25,19 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // The enroller reads the first stdin line as "name<TAB>mobile" (mobile
-    // optional). The C++ enroll(name) just forwards the string, so no C++
-    // change is needed to carry the number through.
-    Component.onCompleted: {
-        FaceRec.enroll(
-            newUserMobile.length > 0 ? newUserName + "\t" + newUserMobile : newUserName)
-    }
+    // Name-after-face: capture the face FIRST with a placeholder name. The
+    // enroller stores the embedding and returns the new user_id; we then go
+    // collect the real name/mobile and write them onto that row (finalizeUser).
+    Component.onCompleted: FaceRec.enroll("")
     Component.onDestruction: FaceRec.cancel()
     StackView.onDeactivated:  FaceRec.cancel()
 
     Connections {
         target: FaceRec
-        function onEnrolled(name) {
+        function onEnrolled(name, userId) {
             stackView.replace(
-                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
-                { userId: page.newUserId, userName: page.newUserName,
-                  userMobile: page.newUserMobile })
+                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationDetailsPage.qml",
+                { newUserId: "" + userId })
         }
         function onFailed(reason) {
             errorBanner.text = qsTr("Couldn't register: ") + reason
