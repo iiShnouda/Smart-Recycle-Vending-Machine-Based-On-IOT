@@ -304,12 +304,37 @@ Rectangle {
 
             Text { text: qsTr("Name  (type to search products)")
                    font.pixelSize: 16; color: "#5A6B52" }
-            TextField {
-                id: editName
+            Row {
                 width: parent.width
-                placeholderText: qsTr("e.g. Coca Cola 330ml")
-                font.pixelSize: 22
-                onTextChanged: nameSearch.restart()
+                spacing: 10
+                TextField {
+                    id: editName
+                    width: parent.width - 170
+                    placeholderText: qsTr("e.g. Coca Cola 330ml")
+                    font.pixelSize: 22
+                    onTextChanged: nameSearch.restart()
+                }
+                // Explicit lookup — fetches images + info from Open Food Facts.
+                Rectangle {
+                    width: 160; height: 56
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 12
+                    color: editName.text.trim().length > 0 ? "#0891B2" : "#9CA3AF"
+                    TapHandler {
+                        enabled: editName.text.trim().length > 0
+                        onTapped: { editDialog.nameSearching = true; OffClient.search(editName.text) }
+                    }
+                    Row {
+                        anchors.centerIn: parent; spacing: 8
+                        BusyIndicator { running: editDialog.nameSearching
+                                        visible: editDialog.nameSearching
+                                        width: 22; height: 22
+                                        anchors.verticalCenter: parent.verticalCenter }
+                        Text { anchors.verticalCenter: parent.verticalCenter
+                               text: editDialog.nameSearching ? qsTr("Looking…") : qsTr("🔍 Look up")
+                               color: "#FFFFFF"; font.pixelSize: 17; font.weight: Font.ExtraBold }
+                    }
+                }
             }
 
             // Inline suggestions with images — tap one to fill name + image.

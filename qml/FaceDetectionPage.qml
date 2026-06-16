@@ -38,14 +38,6 @@ Rectangle {
     StackView.onActivated:   Idle.touch()
     StackView.onDeactivated: FaceRec.cancel()
 
-    // Reload the preview via the C++ image provider (decodes off the GUI
-    // thread — smoother than the base64 data-URL feeder, which encoded on the
-    // GUI thread and made it laggy).
-    Timer {
-        interval: 90; running: true; repeat: true
-        onTriggered: page.previewTick++
-    }
-
     // ── FaceRec events ───────────────────────────────────────────
     Connections {
         target: FaceRec
@@ -144,38 +136,13 @@ Rectangle {
             scanLine: status === 0
         }
 
-        // Circular preview via a "donut" mask (paint the page bg over the
-        // corners). clip:true on a rounded Rectangle renders BLANK on the Pi
-        // GPU — this is the same technique the enroll page uses successfully.
+        // Flicker-free circular live preview (double-buffered image provider).
         Item {
             anchors.centerIn: parent
             width: parent.width  * 0.66
             height: parent.height * 0.66
 
-            Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
-
-            // Live frame via the C++ image provider (off-GUI-thread decode).
-            Image {
-                anchors.fill: parent
-                fillMode: Image.PreserveAspectCrop
-                cache: false
-                asynchronous: true
-                source: "image://facepreview/" + previewTick
-            }
-
-            // Mask the square frame into a circle (rect minus circle, evenodd).
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.fillStyle = page.color
-                    ctx.beginPath()
-                    ctx.rect(0, 0, width, height)
-                    ctx.arc(width / 2, height / 2, width / 2, 0, 2 * Math.PI, true)
-                    ctx.fill("evenodd")
-                }
-            }
+            CameraPreview { anchors.fill: parent; maskColor: page.color }
 
             Text {
                 anchors.centerIn: parent

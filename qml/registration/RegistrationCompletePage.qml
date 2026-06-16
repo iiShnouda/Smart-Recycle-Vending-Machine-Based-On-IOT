@@ -67,10 +67,13 @@ Rectangle {
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
             TapHandler {
                 id: doneTap
-                onTapped: { while (stackView && stackView.depth > 1) stackView.pop() }
+                // Go straight to the main page, logged in as the new user.
+                onTapped: stackView.push(
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
+                    { userName: page.userName, userId: page.userId })
             }
             Text { anchors.centerIn: parent
-                   text: { langTick; return qsTr("Maybe later") + " →" }
+                   text: { langTick; return qsTr("Continue") + " →" }
                    color: "#FFFFFF"; font.pixelSize: 26; font.weight: Font.ExtraBold }
         }
     }

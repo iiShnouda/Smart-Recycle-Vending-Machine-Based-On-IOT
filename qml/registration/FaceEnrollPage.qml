@@ -40,12 +40,6 @@ Rectangle {
     Component.onDestruction: FaceRec.cancel()
     StackView.onDeactivated:  FaceRec.cancel()
 
-    // Reload the preview via the C++ image provider (off-GUI-thread decode).
-    Timer {
-        interval: 90; running: true; repeat: true
-        onTriggered: page.previewTick++
-    }
-
     Connections {
         target: FaceRec
         function onEnrolled(name) {
@@ -133,46 +127,13 @@ Rectangle {
             }
         }
 
-        // The round face preview.
+        // Flicker-free circular live preview (double-buffered image provider).
         Item {
             anchors.centerIn: parent
             width: ringWrap.faceR * 2
             height: ringWrap.faceR * 2
 
-            // Dark disc shown until the first frame arrives.
-            Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
-
-            // Square camera frame…
-            Image {
-                id: faceImg
-                anchors.fill: parent
-                fillMode: Image.PreserveAspectCrop
-                cache: false
-                asynchronous: true
-                // Live frame via the C++ image provider (off-GUI-thread decode).
-                source: "image://facepreview/" + previewTick
-            }
-
-            // …turned into a CIRCLE: paint the page background over the corners
-            // (even-odd rect minus circle). No GraphicalEffects module needed.
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.fillStyle = page.color
-                    ctx.beginPath()
-                    ctx.rect(0, 0, width, height)
-                    ctx.arc(width / 2, height / 2, width / 2, 0, 2 * Math.PI, true)
-                    ctx.fill("evenodd")
-                }
-            }
-        }
-
-        // Spinner until the first preview frame is ready.
-        BusyIndicator {
-            anchors.centerIn: parent
-            running: faceImg.status !== Image.Ready
+            CameraPreview { anchors.fill: parent; maskColor: page.color }
         }
     }
 
