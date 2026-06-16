@@ -713,7 +713,28 @@ Rectangle {
                 visible: scanDialog.phase === "scanning" || scanDialog.phase === "looking"
                 width: parent.width; spacing: 20
                 anchors.horizontalCenter: parent.horizontalCenter
+
+                // Live camera so the admin can aim the barcode. The scanner
+                // sidecar writes its frames to the same preview file the face
+                // provider reads (they never run at once).
+                Rectangle {
+                    visible: scanDialog.phase === "scanning"
+                    width: 640; height: 360; radius: 18
+                    color: "#1A1D1A"; clip: true
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    CameraPreview {
+                        anchors.fill: parent
+                        circular: false
+                        cornerRadius: 18
+                        fps: 12
+                    }
+                    // Aiming guide line down the middle.
+                    Rectangle { anchors.centerIn: parent; width: parent.width * 0.8
+                                height: 3; color: "#00E5FF"; opacity: 0.7 }
+                }
+
                 BusyIndicator { running: visible; width: 120; height: 120
+                                visible: scanDialog.phase === "looking"
                                 anchors.horizontalCenter: parent.horizontalCenter }
                 Text {
                     text: scanDialog.phase === "scanning"

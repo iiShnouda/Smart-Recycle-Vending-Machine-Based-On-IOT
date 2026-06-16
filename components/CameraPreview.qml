@@ -17,12 +17,18 @@ Item {
     id: root
     property color maskColor: "#F2F4ED"   // page background, painted over the corners
     property int   fps: 12
+    property bool  circular: true         // false → rectangular (e.g. barcode)
+    property int   cornerRadius: 18       // used only when !circular
 
     property int tick: 0
     property Item frontImg: imgA
 
-    // Dark disc shown until the first frame is ready.
-    Rectangle { anchors.fill: parent; radius: width / 2; color: "#1A1D1A" }
+    // Dark placeholder shown until the first frame is ready.
+    Rectangle {
+        anchors.fill: parent
+        radius: root.circular ? width / 2 : root.cornerRadius
+        color: "#1A1D1A"
+    }
 
     Image {
         id: imgA
@@ -52,11 +58,14 @@ Item {
     }
 
     // Mask the square frame into a circle (rect minus circle, even-odd).
+    // Skipped entirely for the rectangular (barcode) variant.
     Canvas {
         anchors.fill: parent
+        visible: root.circular
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
+            if (!root.circular) return
             ctx.fillStyle = root.maskColor
             ctx.beginPath()
             ctx.rect(0, 0, width, height)
