@@ -151,8 +151,8 @@ Rectangle {
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 cache: false
-                // Live frame as a base64 data URL fed from C++ (FaceFrame) —
-                // reliably renders on the Pi where file:// / image:// stayed blank.
+                asynchronous: false
+                // Live frame as a base64 data URL fed from C++ (FaceFrame).
                 source: status === 0 ? FaceFrame.frame : ""
             }
 
@@ -165,6 +165,34 @@ Rectangle {
                 font.weight: Font.Black
                 style: Text.Outline
                 styleColor: "#FFFFFF"
+            }
+        }
+    }
+
+    // ── TEMP DIAGNOSTIC (remove once the preview is confirmed) ──────────
+    // A raw preview OUTSIDE the disc/ring + a readout, so we can see exactly
+    // where the blank comes from when testing on the actual screen.
+    Column {
+        z: 200
+        anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 10
+        spacing: 4
+        Rectangle {
+            width: 220; height: 165; color: "#000000"
+            border.width: 3; border.color: "#FF0000"
+            Image {
+                anchors.fill: parent; anchors.margins: 3
+                fillMode: Image.PreserveAspectFit
+                cache: false; asynchronous: false
+                source: FaceFrame.frame          // raw, not gated, not in a disc
+            }
+        }
+        Rectangle {
+            width: 220; height: 30; color: "#FFFFFF"
+            Text {
+                anchors.centerIn: parent
+                text: "len=" + (FaceFrame.frame ? FaceFrame.frame.length : -1)
+                      + "  status=" + status
+                color: "#000000"; font.pixelSize: 18; font.weight: Font.Black
             }
         }
     }
