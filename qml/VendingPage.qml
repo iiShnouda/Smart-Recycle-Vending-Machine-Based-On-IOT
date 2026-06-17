@@ -108,7 +108,10 @@ Rectangle {
     }
 
     Component.onCompleted: { Idle.touch(); ProductsModel.reload() }
-    StackView.onActivated: Idle.touch()
+    // Re-pull on every entry so changes made on the admin Products page (stock,
+    // price, name, image, active) are reflected the moment the customer opens
+    // — not only on first creation.
+    StackView.onActivated: { Idle.touch(); ProductsModel.reload() }
 
     Component { id: receiptComponent; VendingReceiptPage {} }
 
@@ -232,7 +235,10 @@ Rectangle {
                 Loader {
                     anchors.fill: parent
                     sourceComponent: slotCardComponent
-                    property int slotIdx: index
+                    // Push the row index INTO the loaded card. A `property int
+                    // slotIdx: index` here is shadowed by the card's own
+                    // slotIdx, so every card stayed 0 → all showed "Slot 1".
+                    onLoaded: item.slotIdx = index
                 }
             }
         }
@@ -259,6 +265,9 @@ Rectangle {
             property bool   pcalibrated: false
 
             Component.onCompleted: refresh()
+            // The Loader assigns slotIdx just after onCompleted, so re-read the
+            // model whenever it lands on its real value (0..7).
+            onSlotIdxChanged: refresh()
             function refresh() {
                 // QAbstractListModel exposes data via index()
                 const idx = ProductsModel.index(slotIdx, 0)

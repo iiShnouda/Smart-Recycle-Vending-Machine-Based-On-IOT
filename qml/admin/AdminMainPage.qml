@@ -33,6 +33,9 @@ Rectangle {
         // Apply the admin's preferred language on each entry to this page.
         if (adminSettings.lang !== "")
             appManager.selectLanguage(adminSettings.lang)
+        // First-admin bootstrap: if this face got in only because no admin
+        // exists yet, offer to make it THE admin (locks the gate to admins).
+        if (AdminAuth.isBootstrapAdmin) promoteDialog.open()
     }
     StackView.onActivated: Idle.disable()
 
@@ -100,6 +103,79 @@ Rectangle {
                 text: adminSettings.lang === "ar" ? "العربية" : "English"
                 color: "#1F2A1B"
                 font.pixelSize: 18; font.weight: Font.ExtraBold
+            }
+        }
+    }
+
+    // ============ First-admin bootstrap dialog ============
+    // Shown once, when someone enters via the no-admin bootstrap. Promoting
+    // writes role=admin onto their face in faces.db, after which ONLY admins
+    // (e.g. shenoo) can open this panel.
+    Dialog {
+        id: promoteDialog
+        property bool busy: false
+        property string note: ""
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true; focus: true
+        closePolicy: Popup.NoAutoClose
+        Overlay.modal: Rectangle { color: "#A0000000" }
+        width: 720; height: 460
+        standardButtons: Dialog.NoButton
+
+        Connections {
+            target: FaceRec
+            function onRoleSet(userId, role, ok) {
+                promoteDialog.busy = false
+                promoteDialog.note = ok ? qsTr("Done — you are now the admin.")
+                                        : qsTr("Couldn't save. Try again.")
+                if (ok) closeTimer.start()
+            }
+        }
+        Timer { id: closeTimer; interval: 1100; onTriggered: promoteDialog.close() }
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 16
+            Text { text: "🔐"; font.pixelSize: 72
+                   anchors.horizontalCenter: parent.horizontalCenter }
+            Text { text: qsTr("Make this face the admin?")
+                   color: "#1F2A1B"; font.pixelSize: 28; font.weight: Font.ExtraBold
+                   anchors.horizontalCenter: parent.horizontalCenter }
+            Text { text: qsTr("No admin is set yet, so anyone enrolled can open this panel. "
+                            + "Set %1 as the admin to lock it to you only.")
+                        .arg(AdminAuth.adminName.length > 0 ? AdminAuth.adminName : qsTr("this face"))
+                   color: "#5A6B52"; font.pixelSize: 18
+                   horizontalAlignment: Text.AlignHCenter; width: parent.width
+                   wrapMode: Text.WordWrap
+                   anchors.horizontalCenter: parent.horizontalCenter }
+            Text { text: promoteDialog.note; color: "#0891B2"; font.pixelSize: 18
+                   font.weight: Font.Bold; visible: promoteDialog.note.length > 0
+                   anchors.horizontalCenter: parent.horizontalCenter }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 16
+                Rectangle {
+                    width: 220; height: 80; radius: 40; color: "#16A34A"
+                    opacity: promoteDialog.busy ? 0.6 : 1.0
+                    TapHandler {
+                        enabled: !promoteDialog.busy
+                        onTapped: {
+                            promoteDialog.busy = true
+                            promoteDialog.note = qsTr("Saving…")
+                            FaceRec.setRole(parseInt(AdminAuth.adminId), "admin")
+                        }
+                    }
+                    Text { anchors.centerIn: parent; text: qsTr("Make me admin")
+                           color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.ExtraBold }
+                }
+                Rectangle {
+                    width: 150; height: 80; radius: 40; color: "#1A1D1A"
+                    TapHandler { onTapped: promoteDialog.close() }
+                    Text { anchors.centerIn: parent; text: qsTr("Later")
+                           color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.ExtraBold }
+                }
             }
         }
     }

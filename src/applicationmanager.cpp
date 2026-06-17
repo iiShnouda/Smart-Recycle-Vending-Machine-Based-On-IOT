@@ -76,6 +76,10 @@ void ApplicationManager::initialize()
     new AdminAuth(this);
     new FaceService(this);
     new FaceRecSidecar(this);
+    // Admin gate authenticates with the SAME face recogniser, then checks the
+    // matched face's role in faces.db (only "admin" unlocks).
+    if (AdminAuth::s_instance && FaceRecSidecar::s_instance)
+        AdminAuth::s_instance->bindFace(FaceRecSidecar::s_instance);
     new BarcodeScanner(this);     // QML singleton: admin "scan a product" flow
     new FacePreviewFeeder(this);  // QML singleton: live face preview (data URL)
     new ProductsModel(this);

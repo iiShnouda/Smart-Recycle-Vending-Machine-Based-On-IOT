@@ -204,6 +204,28 @@ void FaceRecSidecar::finalizeUser(int userId, const QString &name,
 #endif
 }
 
+void FaceRecSidecar::setRole(int userId, const QString &role)
+{
+    if (isRunning()) {
+        Logger::warn("FaceRec", "Busy — ignoring setRole");
+        return;
+    }
+    m_currentMode = QStringLiteral("setrole");
+    m_stage.clear();
+#ifdef Q_OS_WIN
+    emit roleSet(userId, role, false);
+    return;
+#else
+    startSidecar({ "-u", "-m", "scripts.set_role" });
+    // set_role.py reads one stdin line: "user_id<TAB>role".
+    if (m_proc) {
+        const QString payload = QString::number(userId) + "\t" + role + "\n";
+        m_proc->write(payload.toUtf8());
+        m_proc->closeWriteChannel();
+    }
+#endif
+}
+
 void FaceRecSidecar::cancel()
 {
     if (!m_proc || m_proc->state() == QProcess::NotRunning) return;
@@ -279,8 +301,18 @@ void FaceRecSidecar::onStdout()
             emit finalized(obj.value("user_id").toInt());
         }
         else if (ev == "identified") {
+            // Capture the matched user's role/id + whether any admin exists,
+            // BEFORE emitting, so the admin gate can read them synchronously.
+            m_lastRole    = obj.value("role").toString(QStringLiteral("user"));
+            m_lastUserId  = obj.value("user_id").toInt();
+            m_adminsExist = obj.value("admins_exist").toBool();
             emit identified(obj.value("name").toString(),
                             obj.value("score").toDouble());
+        }
+        else if (ev == "roleset") {
+            emit roleSet(obj.value("user_id").toInt(),
+                         obj.value("role").toString(),
+                         obj.value("ok").toBool());
         }
         else if (ev == "unknown") {
             emit unknown(obj.value("score").toDouble());

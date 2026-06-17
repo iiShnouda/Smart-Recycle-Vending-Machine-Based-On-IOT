@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../../components"   // CameraPreview (not a global module type)
 
 /*
  * AdminGatePage — face-scan gate before the admin panel.
@@ -141,9 +142,24 @@ Rectangle {
             border.color: "#D8E0CF"
         }
 
-        // Center icon
+        // Live face preview while scanning (admin login IS face login).
+        Item {
+            anchors.centerIn: parent
+            width: parent.width - 96
+            height: parent.height - 96
+            visible: AdminAuth.state === AdminAuth.SCANNING
+            CameraPreview {
+                anchors.fill: parent
+                circular: true
+                maskColor: "#FFFFFF"
+                active: AdminAuth.state === AdminAuth.SCANNING
+            }
+        }
+
+        // Center icon (hidden while the camera is up)
         Text {
             anchors.centerIn: parent
+            visible: AdminAuth.state !== AdminAuth.SCANNING
             text: {
                 switch (AdminAuth.state) {
                     case AdminAuth.SCANNING: return "👤"
@@ -196,7 +212,7 @@ Rectangle {
                     case AdminAuth.IDLE:     return "Tap to scan"
                     case AdminAuth.SCANNING: return "Scanning..."
                     case AdminAuth.ACCEPTED: return "Welcome, " + AdminAuth.adminName
-                    case AdminAuth.REJECTED: return "Not recognised — try again"
+                    case AdminAuth.REJECTED: return "Not recognised or not an admin"
                     case AdminAuth.LOCKED:   return "Locked"
                     default:                 return ""
                 }

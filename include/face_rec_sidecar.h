@@ -62,6 +62,12 @@ public:
     int     blinkRequired() const { return m_blinkRequired; }
     int     enrollCount()   const { return m_enrollCount; }
     int     enrollTotal()   const { return m_enrollTotal; }
+    // Set by the last "identified" event — the matched user's role
+    // ("admin"/"user"), their user_id, and whether ANY admin exists yet.
+    // The admin gate reads these to decide whether to unlock.
+    QString lastRole()      const { return m_lastRole; }
+    int     lastUserId()    const { return m_lastUserId; }
+    bool    adminsExist()   const { return m_adminsExist; }
 
 public slots:
     Q_INVOKABLE void identify();
@@ -69,6 +75,8 @@ public slots:
     /** Name-after-face: set the real name/mobile on a just-enrolled face. */
     Q_INVOKABLE void finalizeUser(int userId, const QString &name,
                                   const QString &mobile);
+    /** Set a user's role ("admin"/"user") in faces.db (one-shot sidecar). */
+    Q_INVOKABLE void setRole(int userId, const QString &role);
     Q_INVOKABLE void cancel();
     /** Pump one BGR/RGB camera frame into the sidecar. The kiosk's
      *  Camera owns the device; this just JPEG-encodes the frame and
@@ -84,6 +92,7 @@ signals:
     void unknown(double bestScore);
     void enrolled(const QString &name, int userId);
     void finalized(int userId);
+    void roleSet(int userId, const QString &role, bool ok);
     void failed(const QString &reason);
 
 private slots:
@@ -108,6 +117,9 @@ private:
     int                m_enrollCount   = 0;   // poses captured during enrollment
     int                m_enrollTotal   = 3;   // poses required
     quint64            m_framesSent    = 0;   // diagnostic — frames pushed to Python
+    QString            m_lastRole      = QStringLiteral("user"); // from "identified"
+    int                m_lastUserId    = 0;
+    bool               m_adminsExist   = false;
 };
 
 #endif // FACE_REC_SIDECAR_H
