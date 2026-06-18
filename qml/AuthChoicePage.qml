@@ -16,13 +16,38 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // Idle is global — no per-page timer.
+    // Idle is global. Returning to this landing page MUST re-arm the idle
+    // timeout — some earlier page may have disabled it and not turned it back
+    // on — so the kiosk reliably falls back to sleep after 1 minute.
     function bumpIdle() { Idle.touch() }
-    Component.onCompleted: Idle.touch()
-    StackView.onActivated: Idle.touch()
+    Component.onCompleted: { Idle.enable(); Idle.touch() }
+    StackView.onActivated: { Idle.enable(); Idle.touch() }
     TapHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
         onTapped: Idle.touch()
+    }
+
+    // ── Exit — back to the sleep / start screen ──
+    Rectangle {
+        anchors.top: parent.top; anchors.left: parent.left
+        anchors.topMargin: 30; anchors.leftMargin: 30
+        width: 160; height: 92; radius: 46; z: 50
+        color: "#1A1D1A"
+        BounceOnPress {
+            onTapped: {
+                Idle.enable(); Idle.touch()
+                if (!stackView) stackView = StackView.view
+                while (stackView && stackView.depth > 1) stackView.pop()
+            }
+        }
+        Row {
+            anchors.centerIn: parent; spacing: 8
+            Text { text: "✕"; color: "#FFFFFF"; font.pixelSize: 28; font.weight: Font.Black
+                   anchors.verticalCenter: parent.verticalCenter }
+            Text { text: { langTick; return qsTr("Exit") }; color: "#FFFFFF"
+                   font.pixelSize: 24; font.weight: Font.ExtraBold
+                   anchors.verticalCenter: parent.verticalCenter }
+        }
     }
 
     // ===== QR note overlay =====

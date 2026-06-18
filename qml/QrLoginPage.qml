@@ -30,9 +30,11 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: { Idle.disable(); MachineLink.beginQrSession() }
+    // Keep the idle timeout ARMED here — if the user walks away from the QR
+    // screen, the kiosk should fall back to sleep after 1 minute.
+    Component.onCompleted: { Idle.touch(); MachineLink.beginQrSession() }
     Component.onDestruction: MachineLink.cancel()
-    StackView.onActivated:   Idle.disable()
+    StackView.onActivated:   Idle.touch()
 
     Connections {
         target: MachineLink

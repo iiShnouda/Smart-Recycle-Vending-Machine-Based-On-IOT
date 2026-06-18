@@ -28,6 +28,8 @@ Rectangle {
     property bool navigated: false
     Component.onCompleted: { Idle.disable(); RecycleSession.start() }
     StackView.onActivated:   Idle.disable()
+    // Re-arm the idle timeout when leaving the recycle flow.
+    StackView.onDeactivated: Idle.enable()
 
     Connections {
         target: RecycleSession

@@ -109,7 +109,7 @@ Rectangle {
     Rectangle {
         id: importantBanner
         anchors.bottom: btnRow.top
-        anchors.bottomMargin: 26
+        anchors.bottomMargin: 120
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width * 0.86
         height: importantCol.height + 40
