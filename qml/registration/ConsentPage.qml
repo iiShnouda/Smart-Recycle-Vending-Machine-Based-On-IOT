@@ -53,8 +53,8 @@ Rectangle {
         id: flick
         anchors.top: parent.top
         anchors.topMargin: 170
-        anchors.bottom: btnRow.top
-        anchors.bottomMargin: 30
+        anchors.bottom: importantBanner.top
+        anchors.bottomMargin: 20
         width: parent.width * 0.86
         anchors.horizontalCenter: parent.horizontalCenter
         contentWidth: width
@@ -82,33 +82,6 @@ Rectangle {
                 }
             }
 
-            // IMPORTANT — must have the app + register with the real phone number.
-            Rectangle {
-                width: parent.width
-                radius: 16
-                color: "#FEF3C7"
-                border.width: 2; border.color: "#FBBF24"
-                height: importantCol.height + 28
-                Column {
-                    id: importantCol
-                    anchors.centerIn: parent
-                    width: parent.width - 28
-                    spacing: 8
-                    Row {
-                        spacing: 10
-                        Text { text: "⚠️"; font.pixelSize: 30 }
-                        Text { text: { langTick; return qsTr("You need the ReWinGo app first") }
-                               color: "#92400E"; font.pixelSize: 21; font.weight: Font.ExtraBold
-                               anchors.verticalCenter: parent.verticalCenter }
-                    }
-                    Text {
-                        text: { langTick; return qsTr("Create your account on the ReWinGo phone app before registering your face. On the next step, enter the SAME real phone number you used in the app — it links your face to your account, so you can sign in by FACE or by QR code, and your points are saved.") }
-                        color: "#92400E"; font.pixelSize: 16; wrapMode: Text.WordWrap
-                        width: parent.width
-                    }
-                }
-            }
-
             Bullet {
                 icon:  "📸"; title: { langTick; return qsTr("Your face") }
                 body:  { langTick; return qsTr("We turn it into a list of numbers (a fingerprint) so we can recognise you next visit. We DO NOT keep your photo.") }
@@ -128,6 +101,40 @@ Rectangle {
             Bullet {
                 icon:  "🗑"; title: { langTick; return qsTr("You can delete everything any time") }
                 body:  { langTick; return qsTr("Tap \"Delete my data\" in the user menu.") }
+            }
+        }
+    }
+
+    // ⚠️ Big, prominent notice pinned just above the buttons — impossible to miss.
+    Rectangle {
+        id: importantBanner
+        anchors.bottom: btnRow.top
+        anchors.bottomMargin: 26
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: parent.width * 0.86
+        height: importantCol.height + 40
+        radius: 22
+        color: "#FEF2F2"
+        border.width: 3; border.color: "#DC2626"
+        Column {
+            id: importantCol
+            anchors.centerIn: parent
+            width: parent.width - 48
+            spacing: 10
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 14
+                Text { text: "⚠️"; font.pixelSize: 44
+                       anchors.verticalCenter: parent.verticalCenter }
+                Text { text: { langTick; return qsTr("You MUST have the ReWinGo app") }
+                       color: "#B91C1C"; font.pixelSize: 32; font.weight: Font.Black
+                       anchors.verticalCenter: parent.verticalCenter }
+            }
+            Text {
+                text: { langTick; return qsTr("Create your account on the ReWinGo phone app first. On the next step, enter the SAME phone number from that account — it links your face to your account so you can sign in by FACE or QR, and your points are saved.") }
+                color: "#7F1D1D"; font.pixelSize: 20; font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap; width: parent.width
+                horizontalAlignment: Text.AlignHCenter
             }
         }
     }

@@ -111,8 +111,11 @@ Rectangle {
         // Mobile number
         Column {
             width: parent.width; spacing: 8
-            Text { text: { langTick; return qsTr("Mobile number") }
+            Text { text: { langTick; return qsTr("Your ReWinGo app phone number") }
                    color: "#1F2A1B"; font.pixelSize: 22; font.weight: Font.DemiBold }
+            Text { text: { langTick; return qsTr("Enter the SAME phone number you used to create your account in the ReWinGo app — this links your face to that account so your points are saved.") }
+                   color: "#5A6B52"; font.pixelSize: 15; wrapMode: Text.WordWrap
+                   width: parent.width }
             Rectangle {
                 width: parent.width; height: 92; radius: 18
                 color: "#FFFFFF"; border.width: 2
