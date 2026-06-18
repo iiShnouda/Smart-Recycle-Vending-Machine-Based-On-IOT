@@ -1,0 +1,19 @@
+{
+  "name": "rewingo-auth-service",
+  "version": "1.0.0",
+  "description": "ReWinGo shared auth backend (login/register/byPhone over HiveMQ + MongoDB Atlas). Runs 24/7 in the cloud for all kiosks and the mobile app.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.8.0",
+    "mqtt": "^5.10.1"
+  }
+}
