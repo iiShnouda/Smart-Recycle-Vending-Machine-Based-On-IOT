@@ -82,6 +82,33 @@ Rectangle {
                 }
             }
 
+            // IMPORTANT — must have the app + register with the real phone number.
+            Rectangle {
+                width: parent.width
+                radius: 16
+                color: "#FEF3C7"
+                border.width: 2; border.color: "#FBBF24"
+                height: importantCol.height + 28
+                Column {
+                    id: importantCol
+                    anchors.centerIn: parent
+                    width: parent.width - 28
+                    spacing: 8
+                    Row {
+                        spacing: 10
+                        Text { text: "⚠️"; font.pixelSize: 30 }
+                        Text { text: { langTick; return qsTr("You need the ReWinGo app first") }
+                               color: "#92400E"; font.pixelSize: 21; font.weight: Font.ExtraBold
+                               anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Text {
+                        text: { langTick; return qsTr("Create your account on the ReWinGo phone app before registering your face. On the next step, enter the SAME real phone number you used in the app — it links your face to your account, so you can sign in by FACE or by QR code, and your points are saved.") }
+                        color: "#92400E"; font.pixelSize: 16; wrapMode: Text.WordWrap
+                        width: parent.width
+                    }
+                }
+            }
+
             Bullet {
                 icon:  "📸"; title: { langTick; return qsTr("Your face") }
                 body:  { langTick; return qsTr("We turn it into a list of numbers (a fingerprint) so we can recognise you next visit. We DO NOT keep your photo.") }

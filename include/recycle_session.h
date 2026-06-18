@@ -40,6 +40,15 @@ class RecycleSession : public QObject {
     Q_PROPERTY(double pointValueEGP READ pointValueEGP NOTIFY configChanged)
     Q_PROPERTY(bool active        READ active        NOTIFY activeChanged)
     Q_PROPERTY(QString lastEvent  READ lastEvent     NOTIFY lastEventChanged)
+    // Physical bin fill — CUMULATIVE across sessions, persisted. The aluminium
+    // (can) bin holds 140; the plastic (bottle) bin holds 50. Progress bars on
+    // the recycle page fill from these as the camera accepts items.
+    Q_PROPERTY(int  aluBinCount     READ aluBinCount     NOTIFY binChanged)
+    Q_PROPERTY(int  plasticBinCount READ plasticBinCount NOTIFY binChanged)
+    Q_PROPERTY(int  aluBinCap       READ aluBinCap       CONSTANT)
+    Q_PROPERTY(int  plasticBinCap   READ plasticBinCap   CONSTANT)
+    Q_PROPERTY(bool aluBinFull      READ aluBinFull      NOTIFY binChanged)
+    Q_PROPERTY(bool plasticBinFull  READ plasticBinFull  NOTIFY binChanged)
 
 public:
     explicit RecycleSession(QObject *parent = nullptr);
@@ -60,12 +69,21 @@ public:
     double pointValueEGP()   const { return m_pointEGP; }
     bool active()       const { return m_active;   }
     QString lastEvent() const { return m_lastEvent; }
+    int  aluBinCount()     const { return m_aluBin; }
+    int  plasticBinCount() const { return m_plasticBin; }
+    int  aluBinCap()       const { return kAluCap; }
+    int  plasticBinCap()   const { return kPlasticCap; }
+    bool aluBinFull()      const { return m_aluBin >= kAluCap; }
+    bool plasticBinFull()  const { return m_plasticBin >= kPlasticCap; }
 
 public slots:
     Q_INVOKABLE void start();                       /* reset + arm the lane */
     Q_INVOKABLE int  finish();                      /* disarm; returns total */
     Q_INVOKABLE void sendVerdict(const QString &v); /* "BOTTLE"|"CAN"|"REJECT" */
     Q_INVOKABLE void setBaskets(bool bottleFull, bool canFull);
+    /* Admin emptied a physical bin → reset its fill counter to 0. */
+    Q_INVOKABLE void emptyAluBin();
+    Q_INVOKABLE void emptyPlasticBin();
 
     /* The camera classifier's raw sub-class: "small_bottle" | "large_bottle"
      * | "can" | "reject". Remembers the bottle size for scoring, then sends
@@ -84,6 +102,7 @@ signals:
     void configChanged();
     void activeChanged();
     void lastEventChanged();
+    void binChanged();
 
     void itemAccepted(const QString &type, int points);  /* drives the coin pop */
     void itemRejected(const QString &reason);
@@ -105,6 +124,12 @@ private:
     bool    m_pendingLargeBottle = false;  // last camera verdict was large?
     bool    m_active   = false;
     QString m_lastEvent;
+
+    // Persisted cumulative bin fill + fixed capacities.
+    int     m_aluBin     = 0;       // cans in the aluminium bin
+    int     m_plasticBin = 0;       // bottles in the plastic bin
+    static constexpr int kAluCap     = 140;
+    static constexpr int kPlasticCap = 50;
 };
 
 #endif // RECYCLE_SESSION_H

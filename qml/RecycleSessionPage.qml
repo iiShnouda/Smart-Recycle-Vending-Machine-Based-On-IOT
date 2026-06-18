@@ -111,10 +111,64 @@ Rectangle {
         Counter { label: qsTr("Rejected"); value: RecycleSession.rejected; icon: "✕"; accent: "#DC2626"; borderColor: "#FCA5A5" }
     }
 
+    // ── Bin fill bars (real progress: cans → 140, bottles → 50) ──
+    Column {
+        id: binBars
+        anchors.top: counters.bottom; anchors.topMargin: 34
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: parent.width * 0.8
+        spacing: 18
+
+        component BinBar: Item {
+            width: parent.width
+            height: 66
+            property string label: ""
+            property string icon: ""
+            property int value: 0
+            property int cap: 1
+            property color accent: "#0891B2"
+            property bool full: false
+            property real frac: cap > 0 ? Math.min(1, value / cap) : 0
+
+            Text { anchors.left: parent.left; anchors.top: parent.top
+                   text: icon + "  " + label
+                   color: "#1F2A1B"; font.pixelSize: 22; font.weight: Font.ExtraBold }
+            Text { anchors.right: parent.right; anchors.top: parent.top
+                   text: value + " / " + cap + (full ? "   •  FULL" : "")
+                   color: full ? "#DC2626" : "#5A6B52"
+                   font.pixelSize: 22; font.weight: Font.Bold }
+            Rectangle {
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 28; radius: 14
+                color: "#E8EEDB"
+                Rectangle {
+                    anchors.left: parent.left; anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: Math.max(height, parent.width * frac)
+                    radius: 14
+                    color: full ? "#DC2626" : accent
+                    Behavior on width { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                }
+            }
+        }
+
+        BinBar {
+            icon: "🥫"; label: qsTr("Aluminium bin (cans)")
+            value: RecycleSession.aluBinCount; cap: RecycleSession.aluBinCap
+            accent: "#7A8B6A"; full: RecycleSession.aluBinFull
+        }
+        BinBar {
+            icon: "🍼"; label: qsTr("Plastic bin (bottles)")
+            value: RecycleSession.plasticBinCount; cap: RecycleSession.plasticBinCap
+            accent: "#0891B2"; full: RecycleSession.plasticBinFull
+        }
+    }
+
     // ── Last-event banner ──
     Rectangle {
         id: banner
-        anchors.top: counters.bottom; anchors.topMargin: 40
+        anchors.top: binBars.bottom; anchors.topMargin: 28
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width * 0.8; height: 90; radius: 45
         color: "#1A1D1A"

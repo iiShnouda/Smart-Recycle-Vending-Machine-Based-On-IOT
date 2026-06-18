@@ -289,29 +289,6 @@ Rectangle {
             }
         }
 
-        // This kiosk's IP — type it into the mobile app's "Server" field so
-        // the phone can reach the backend on this network. Tap to refresh.
-        Rectangle {
-            id: ipPill
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: ipRow.implicitWidth + 44
-            height: 54; radius: 27
-            color: "#EFF6FF"; border.width: 1; border.color: "#0891B2"
-            property string kioskIp: appManager.localIp()
-            TapHandler { onTapped: ipPill.kioskIp = appManager.localIp() }
-            Row {
-                id: ipRow
-                anchors.centerIn: parent
-                spacing: 10
-                Text { text: "📶"; font.pixelSize: 24
-                       anchors.verticalCenter: parent.verticalCenter }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("App server:  %1:3001").arg(ipPill.kioskIp)
-                    color: "#0E7490"; font.pixelSize: 21; font.weight: Font.ExtraBold
-                }
-            }
-        }
     }
 
     // ============ Nav grid ============

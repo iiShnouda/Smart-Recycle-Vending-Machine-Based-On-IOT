@@ -16,6 +16,9 @@ RecycleSession::RecycleSession(QObject *parent) : QObject(parent)
     m_largePts = s.value("recycle/largeBottlePoints", 2).toInt();
     m_canPts   = s.value("recycle/canPoints",         2).toInt();
     m_pointEGP = s.value("recycle/pointValueEGP",   0.4).toDouble();
+    // Cumulative bin fill survives restarts (reset by the admin "empty bin").
+    m_aluBin     = s.value("recycle/aluBinCount",     0).toInt();
+    m_plasticBin = s.value("recycle/plasticBinCount", 0).toInt();
 }
 
 void RecycleSession::setLast(const QString &str)
@@ -103,6 +106,22 @@ void RecycleSession::setCanPoints(int p)
     emit countsChanged();
 }
 
+void RecycleSession::emptyAluBin()
+{
+    m_aluBin = 0;
+    QSettings().setValue("recycle/aluBinCount", 0);
+    emit binChanged();
+    Logger::audit("Recycle", "Aluminium bin emptied");
+}
+
+void RecycleSession::emptyPlasticBin()
+{
+    m_plasticBin = 0;
+    QSettings().setValue("recycle/plasticBinCount", 0);
+    emit binChanged();
+    Logger::audit("Recycle", "Plastic bin emptied");
+}
+
 void RecycleSession::onSerialLine(const QString &line)
 {
     if (!line.startsWith("EVT,")) return;
@@ -120,10 +139,16 @@ void RecycleSession::onSerialLine(const QString &line)
         if (m_pendingLargeBottle) ++m_largeBottles; else ++m_smallBottles;
         m_pendingLargeBottle = false;
         emit countsChanged();
+        if (m_plasticBin < kPlasticCap) ++m_plasticBin;   // → plastic bin fills
+        QSettings().setValue("recycle/plasticBinCount", m_plasticBin);
+        emit binChanged();
         emit itemAccepted(QStringLiteral("bottle"), pts);
         setLast(tr("Bottle accepted  +%1").arg(pts));
     } else if (line.startsWith("EVT,DROPPED,CAN")) {
         ++m_cans; emit countsChanged();
+        if (m_aluBin < kAluCap) ++m_aluBin;               // → aluminium bin fills
+        QSettings().setValue("recycle/aluBinCount", m_aluBin);
+        emit binChanged();
         emit itemAccepted(QStringLiteral("can"), m_canPts);
         setLast(tr("Can accepted  +%1").arg(m_canPts));
     } else if (line.startsWith("EVT,REJECTED")) {
