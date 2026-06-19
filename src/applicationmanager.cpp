@@ -352,6 +352,32 @@ void ApplicationManager::initialize()
     m_machineLink = new MachineLink(this);
     m_machineLink->configure(m_kioskId);
 
+    // ── Publish this machine's live bin levels so the phone app can show them.
+    // RETAINED on rewingo/<machineId>/machine, so any app that subscribes to
+    // rewingo/+/machine receives every machine's latest state immediately —
+    // no extra backend needed. Re-published on each bin change + on connect.
+    auto publishMachine = [this]() {
+        if (!m_mqtt || !RecycleSession::s_instance) return;
+        RecycleSession *r = RecycleSession::s_instance;
+        QJsonObject o{
+            { QStringLiteral("machineId"),   m_kioskId },
+            { QStringLiteral("aluBin"),      r->aluBinCount() },
+            { QStringLiteral("plasticBin"),  r->plasticBinCount() },
+            { QStringLiteral("aluCap"),      r->aluBinCap() },
+            { QStringLiteral("plasticCap"),  r->plasticBinCap() },
+            { QStringLiteral("aluFull"),     r->aluBinFull() },
+            { QStringLiteral("plasticFull"), r->plasticBinFull() },
+            { QStringLiteral("inService"),   true },
+        };
+        m_mqtt->publishJson(QStringLiteral("machine"), o, /*qos*/ 1, /*retain*/ true);
+    };
+    if (RecycleSession::s_instance)
+        connect(RecycleSession::s_instance, &RecycleSession::binChanged,
+                this, [publishMachine]() { publishMachine(); });
+    if (m_mqtt)
+        connect(m_mqtt, &MqttClient::connectionChanged, this,
+                [publishMachine](bool ok) { if (ok) publishMachine(); });
+
     // ── Update checker ─────────────────────────────────────────────────
     // Owner/name as it appears in the GitHub URL — bake yours in here,
     // OR override at runtime via QSettings("updater/repo", "owner/name").
