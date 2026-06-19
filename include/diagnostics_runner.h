@@ -35,12 +35,21 @@ public:
 
 public slots:
     Q_INVOKABLE void testPing();
-    Q_INVOKABLE void testStatus();
-    Q_INVOKABLE void testMotor(int slot);            // 1..8
+    Q_INVOKABLE void testIr();                       // 5-sensor mask
+    Q_INVOKABLE void testStatus() { testIr(); }      // back-compat alias
+    Q_INVOKABLE void testMotor(int slot);            // 1..8 — one revolution
+    Q_INVOKABLE void testConveyor();                 // recycle belt
     Q_INVOKABLE void testCell(int slot);             // 1..8
-    Q_INVOKABLE void testServo(int us);              // 500..2500
-    Q_INVOKABLE void testRunAll();                   // sweeps all of the above
+    Q_INVOKABLE void testServo(int deg);             // 0..180
+    Q_INVOKABLE void testRelay(int idx, bool on);    // 1..3
+    Q_INVOKABLE void testDoor();                     // reed switch
+    Q_INVOKABLE void testRunAll();                   // sweeps the safe ones
     Q_INVOKABLE void clearResults();
+
+    // Wire-command strings, exposed so the QML result chips can key on exactly
+    // what gets sent (so each row finds its own reply in `results`).
+    Q_INVOKABLE static QString motorCmd(int slot);
+    Q_INVOKABLE static QString relayCmd(int idx, bool on);
 
     // Hooks from ApplicationManager
     void onCommandSucceeded(const QString &command, const QString &reply);
