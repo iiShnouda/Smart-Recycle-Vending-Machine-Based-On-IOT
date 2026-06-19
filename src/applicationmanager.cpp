@@ -211,14 +211,14 @@ void ApplicationManager::initialize()
     //   - CLOSED → trigger an inventory rescan tagged "admin"
     connect(this, &ApplicationManager::serialReply, this,
             [this](const QString &line) {
-        if (line.startsWith("DOOR:OPEN")) {
-            Logger::audit("Reed", "Admin door opened (STM32)");
-            emit adminRequested();
-        } else if (line.startsWith("DOOR:CLOSED")) {
-            Logger::info("Inventory", "Admin door closed (STM32) — rescan");
-            if (m_scanner) m_scanner->rescanNow("admin");
-        }
-    });
+                if (line.startsWith("DOOR:OPEN")) {
+                    Logger::audit("Reed", "Admin door opened (STM32)");
+                    emit adminRequested();
+                } else if (line.startsWith("DOOR:CLOSED")) {
+                    Logger::info("Inventory", "Admin door closed (STM32) — rescan");
+                    if (m_scanner) m_scanner->rescanNow("admin");
+                }
+            });
 
     // ── Recycle session ────────────────────────────────────────────────
     // The recycle counter (RecycleSession) is driven by the STM32's EVT
@@ -471,8 +471,18 @@ void ApplicationManager::setCabinetLeds(bool on)
     m_ledsOn = on;
     // Relay 1 = vending light, Relay 2 = bottom LED (the STM32 switches
     // them via the 2N2222 driver). Fire-and-forget; no-op if no STM32.
-    sendSerial(QStringLiteral("RELAY 1 %1").arg(on ? 1 : 0), 0);
-    sendSerial(QStringLiteral("RELAY 2 %1").arg(on ? 1 : 0), 0);
+    // NOTE: colon-joined to match Protocol_Dispatch's ':' split in
+    // protocol.c — every other command in this codebase follows that
+    // convention (DISPENSE:, ANGLE:, SERVO:, etc). A bare "RELAY 1 0"
+    // would be parsed as one unmatched command name ("RELAY 1 0") and
+    // bounce back ERR:unknown, exactly like the DISPENSE/SERVO bugs.
+    // UNVERIFIED: protocol.c as shared doesn't list a RELAY entry in its
+    // dispatch table, so the exact name/arg order below is a best-effort
+    // guess consistent with the rest of the protocol, not a confirmed
+    // match — please check it against whichever source actually owns
+    // relay control on the firmware side.
+    sendSerial(QStringLiteral("RELAY:%1:%2").arg(1).arg(on ? 1 : 0), 0);
+    sendSerial(QStringLiteral("RELAY:%1:%2").arg(2).arg(on ? 1 : 0), 0);
     Logger::info("LED", on ? "Cabinet LEDs on" : "Cabinet LEDs off (idle)");
 }
 
@@ -634,12 +644,12 @@ void ApplicationManager::publishMachineState()
     if (!m_mqtt) return;
     QSettings s;
     QJsonObject o{
-        { QStringLiteral("machineId"), m_kioskId },
-        { QStringLiteral("name"),      s.value(QStringLiteral("machine/name")).toString() },
-        { QStringLiteral("location"),  s.value(QStringLiteral("machine/location")).toString() },
-        { QStringLiteral("deployed"),  s.value(QStringLiteral("machine/deployed"), false).toBool() },
-        { QStringLiteral("inService"), s.value(QStringLiteral("machine/inService"), true).toBool() },
-    };
+                  { QStringLiteral("machineId"), m_kioskId },
+                  { QStringLiteral("name"),      s.value(QStringLiteral("machine/name")).toString() },
+                  { QStringLiteral("location"),  s.value(QStringLiteral("machine/location")).toString() },
+                  { QStringLiteral("deployed"),  s.value(QStringLiteral("machine/deployed"), false).toBool() },
+                  { QStringLiteral("inService"), s.value(QStringLiteral("machine/inService"), true).toBool() },
+                  };
     if (RecycleSession::s_instance) {
         RecycleSession *r = RecycleSession::s_instance;
         o[QStringLiteral("aluBin")]      = r->aluBinCount();
