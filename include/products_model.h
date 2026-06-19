@@ -3,6 +3,7 @@
 
 #include <QAbstractListModel>
 #include <QQmlEngine>
+#include <QJsonArray>
 
 class Database;
 
@@ -88,6 +89,10 @@ public slots:
     Q_INVOKABLE int emptyShelfRaw(int slot) const;
     Q_INVOKABLE int unitWeightRaw(int slot) const;
     Q_INVOKABLE int lastRaw     (int slot) const;
+
+    /** Configured products as JSON [{slot,name,points,inStock}] — published in
+     *  the machine state so the phone app can list what's in the machine. */
+    QJsonArray productsArray() const;
 
 private:
     struct Row {

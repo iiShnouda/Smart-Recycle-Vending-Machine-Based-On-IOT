@@ -4,6 +4,7 @@
 
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QJsonObject>
 
 ProductsModel *ProductsModel::s_instance = nullptr;
 
@@ -249,4 +250,20 @@ int ProductsModel::lastRaw(int slot) const
 {
     if (slot < 1 || slot > 8) return 0;
     return m_rows[slot - 1].lastRaw;
+}
+
+QJsonArray ProductsModel::productsArray() const
+{
+    QJsonArray arr;
+    for (const Row &r : m_rows) {
+        if (r.name.isEmpty() || r.name.startsWith(QStringLiteral("Slot ")))
+            continue;                          // unconfigured slot — skip
+        arr.append(QJsonObject{
+            { QStringLiteral("slot"),    r.slot },
+            { QStringLiteral("name"),    r.name },
+            { QStringLiteral("points"),  r.price },
+            { QStringLiteral("inStock"), r.count > 0 && r.active },
+        });
+    }
+    return arr;
 }

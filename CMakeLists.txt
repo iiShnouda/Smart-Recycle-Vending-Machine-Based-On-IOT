@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Recycle_Vending_Machine_LCD VERSION 0.35.0 LANGUAGES CXX)
+project(Recycle_Vending_Machine_LCD VERSION 0.36.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,6 +70,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/admin/AdminMainPage.qml
         qml/admin/AdminDiagnosticsPage.qml
         qml/admin/AdminProductsPage.qml
+        qml/admin/AdminMachinePage.qml
         qml/admin/AdminAnalyticsPage.qml
         qml/admin/AdminLogsPage.qml
         qml/admin/AdminFaultsPage.qml

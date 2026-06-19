@@ -101,8 +101,20 @@ public slots:
     /** Force the inventory scanner to take a fresh sample right now. */
     Q_INVOKABLE void         rescanInventoryNow();
 
+    // ---- Machine registry (admin Deploy page + phone "Find machine") -------
+    /** (Re)publish this machine's retained state to rewingo/<id>/machine. */
+    Q_INVOKABLE void    publishMachineState();
+    /** Admin sets the machine's name/location + deployed/in-service flags. */
+    Q_INVOKABLE void    setMachineInfo(const QString &name, const QString &location,
+                                       bool deployed, bool inService);
+    Q_INVOKABLE QString machineName()      const;
+    Q_INVOKABLE QString machineLocation()  const;
+    Q_INVOKABLE bool    machineDeployed()  const;
+    Q_INVOKABLE bool    machineInService() const;
+
 signals:
     void kioskNameChanged();
+    void machineInfoChanged();
     void languageChanged(const QString &newLanguage);
     void languageChangeFailed(const QString &reason);
     void presenceChanged(bool present);

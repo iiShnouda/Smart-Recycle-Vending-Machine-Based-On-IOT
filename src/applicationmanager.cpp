@@ -352,31 +352,20 @@ void ApplicationManager::initialize()
     m_machineLink = new MachineLink(this);
     m_machineLink->configure(m_kioskId);
 
-    // ── Publish this machine's live bin levels so the phone app can show them.
-    // RETAINED on rewingo/<machineId>/machine, so any app that subscribes to
-    // rewingo/+/machine receives every machine's latest state immediately —
-    // no extra backend needed. Re-published on each bin change + on connect.
-    auto publishMachine = [this]() {
-        if (!m_mqtt || !RecycleSession::s_instance) return;
-        RecycleSession *r = RecycleSession::s_instance;
-        QJsonObject o{
-            { QStringLiteral("machineId"),   m_kioskId },
-            { QStringLiteral("aluBin"),      r->aluBinCount() },
-            { QStringLiteral("plasticBin"),  r->plasticBinCount() },
-            { QStringLiteral("aluCap"),      r->aluBinCap() },
-            { QStringLiteral("plasticCap"),  r->plasticBinCap() },
-            { QStringLiteral("aluFull"),     r->aluBinFull() },
-            { QStringLiteral("plasticFull"), r->plasticBinFull() },
-            { QStringLiteral("inService"),   true },
-        };
-        m_mqtt->publishJson(QStringLiteral("machine"), o, /*qos*/ 1, /*retain*/ true);
-    };
+    // ── Publish this machine's live state (bins + admin name/location/status +
+    // products) so the phone app can locate it + show it. RETAINED on
+    // rewingo/<machineId>/machine, so any app that subscribes to
+    // rewingo/+/machine gets it immediately — no extra backend. Re-published on
+    // each bin change, on connect, and whenever the admin edits the machine.
     if (RecycleSession::s_instance)
         connect(RecycleSession::s_instance, &RecycleSession::binChanged,
-                this, [publishMachine]() { publishMachine(); });
+                this, [this]() { publishMachineState(); });
     if (m_mqtt)
         connect(m_mqtt, &MqttClient::connectionChanged, this,
-                [publishMachine](bool ok) { if (ok) publishMachine(); });
+                [this](bool ok) { if (ok) publishMachineState(); });
+    if (ProductsModel::s_instance)
+        connect(ProductsModel::s_instance, &QAbstractItemModel::modelReset,
+                this, [this]() { publishMachineState(); });
 
     // ── Update checker ─────────────────────────────────────────────────
     // Owner/name as it appears in the GitHub URL — bake yours in here,
@@ -639,3 +628,49 @@ void ApplicationManager::onSerialError(const QString &message)
     qWarning() << "[App] serial error:" << message;
     emit serialError(message);
 }
+
+void ApplicationManager::publishMachineState()
+{
+    if (!m_mqtt) return;
+    QSettings s;
+    QJsonObject o{
+        { QStringLiteral("machineId"), m_kioskId },
+        { QStringLiteral("name"),      s.value(QStringLiteral("machine/name")).toString() },
+        { QStringLiteral("location"),  s.value(QStringLiteral("machine/location")).toString() },
+        { QStringLiteral("deployed"),  s.value(QStringLiteral("machine/deployed"), false).toBool() },
+        { QStringLiteral("inService"), s.value(QStringLiteral("machine/inService"), true).toBool() },
+    };
+    if (RecycleSession::s_instance) {
+        RecycleSession *r = RecycleSession::s_instance;
+        o[QStringLiteral("aluBin")]      = r->aluBinCount();
+        o[QStringLiteral("plasticBin")]  = r->plasticBinCount();
+        o[QStringLiteral("aluCap")]      = r->aluBinCap();
+        o[QStringLiteral("plasticCap")]  = r->plasticBinCap();
+        o[QStringLiteral("aluFull")]     = r->aluBinFull();
+        o[QStringLiteral("plasticFull")] = r->plasticBinFull();
+    }
+    if (ProductsModel::s_instance)
+        o[QStringLiteral("products")] = ProductsModel::s_instance->productsArray();
+    m_mqtt->publishJson(QStringLiteral("machine"), o, /*qos*/ 1, /*retain*/ true);
+}
+
+void ApplicationManager::setMachineInfo(const QString &name, const QString &location,
+                                        bool deployed, bool inService)
+{
+    QSettings s;
+    s.setValue(QStringLiteral("machine/name"), name);
+    s.setValue(QStringLiteral("machine/location"), location);
+    s.setValue(QStringLiteral("machine/deployed"), deployed);
+    s.setValue(QStringLiteral("machine/inService"), inService);
+    emit machineInfoChanged();
+    publishMachineState();
+}
+
+QString ApplicationManager::machineName() const
+{ return QSettings().value(QStringLiteral("machine/name")).toString(); }
+QString ApplicationManager::machineLocation() const
+{ return QSettings().value(QStringLiteral("machine/location")).toString(); }
+bool ApplicationManager::machineDeployed() const
+{ return QSettings().value(QStringLiteral("machine/deployed"), false).toBool(); }
+bool ApplicationManager::machineInService() const
+{ return QSettings().value(QStringLiteral("machine/inService"), true).toBool(); }

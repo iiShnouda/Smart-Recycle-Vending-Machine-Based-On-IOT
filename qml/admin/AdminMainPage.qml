@@ -380,6 +380,11 @@ Rectangle {
             onTapped: stackView.push(Qt.resolvedUrl("AdminProductsPage.qml"))
         }
         NavTile {
+            label: qsTr("Deploy"); subtitle: qsTr("Name, location & status in the app")
+            accentColor: "#0E7490"
+            onTapped: stackView.push(Qt.resolvedUrl("AdminMachinePage.qml"))
+        }
+        NavTile {
             label: qsTr("Analytics"); subtitle: qsTr("Sales & recycling stats")
             accentColor: "#0891B2"
             onTapped: stackView.push(Qt.resolvedUrl("AdminAnalyticsPage.qml"))
