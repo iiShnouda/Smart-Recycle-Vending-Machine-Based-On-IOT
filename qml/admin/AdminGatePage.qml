@@ -26,10 +26,20 @@ Rectangle {
     // Re-enable is done by the Exit button in AdminMainPage, NOT here —
     // because Component.onDestruction fires on every navigation push too,
     // which would re-enable the timer while admin is still inside the panel.
+    // TEMPORARY (user request): admin FACE LOGIN is BYPASSED — entry goes
+    // straight to the admin panel. To re-enable face login, set this to false.
+    property bool bypassFaceLogin: true
+    Timer { id: bypassTimer; interval: 250
+            onTriggered: stackView.replace(Qt.resolvedUrl("AdminMainPage.qml")) }
+
     // Auto-start the face scan on entry so the admin logs in WITHOUT touching
     // the screen. (They can still tap the ring to retry after a rejection.)
     Timer { id: autoScan; interval: 600; onTriggered: AdminAuth.startScan() }
-    Component.onCompleted: { AdminAuth.reset(); Idle.disable(); autoScan.start() }
+    Component.onCompleted: {
+        AdminAuth.reset(); Idle.disable()
+        if (bypassFaceLogin) bypassTimer.start()
+        else                 autoScan.start()
+    }
     // Auto-retry after a miss (unless locked out) — still no touch needed.
     Connections {
         target: AdminAuth
