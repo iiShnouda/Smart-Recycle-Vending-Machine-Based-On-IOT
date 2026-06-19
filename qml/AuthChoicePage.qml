@@ -44,7 +44,8 @@ Rectangle {
             anchors.centerIn: parent; spacing: 8
             Text { text: "✕"; color: "#FFFFFF"; font.pixelSize: 28; font.weight: Font.Black
                    anchors.verticalCenter: parent.verticalCenter }
-            Text { text: { langTick; return qsTr("Exit") }; color: "#FFFFFF"
+            Text { text: { langTick; return qsTr("Exit") }
+                   color: "#FFFFFF"
                    font.pixelSize: 24; font.weight: Font.ExtraBold
                    anchors.verticalCenter: parent.verticalCenter }
         }
