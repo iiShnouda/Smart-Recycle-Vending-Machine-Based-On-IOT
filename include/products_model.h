@@ -10,10 +10,16 @@ class Database;
 /**
  * ProductsModel — exposes the 8 vending slots to QML.
  *
+ * Pricing: the admin enters the price in EGP (priceEGP). The customer pays in
+ * points, so pricePoints is COMPUTED from EGP via the recycle point value
+ * (1 point = recycle/pointValueEGP EGP). The price_points DB column stores the
+ * EGP figure now.
+ *
  * Roles:
  *   slot           : int        (1..8)
  *   name           : QString
- *   pricePoints    : int
+ *   pricePoints    : int        (COMPUTED — what the customer pays)
+ *   priceEGP       : int        (what the admin typed, in EGP)
  *   imagePath      : QString    (file:// or qrc:/ url)
  *   active         : bool
  *   count          : int        (live, from load cell scan)
@@ -30,8 +36,12 @@ public:
         RoleEmptyShelfRaw,     // HX711 reading when shelf is empty
         RoleUnitWeightRaw,     // HX711 raw counts per single item
         RoleLastRaw,           // most recent raw reading from the scanner
-        RoleCalibrated         // true if both empty + unit are set
+        RoleCalibrated,        // true if both empty + unit are set
+        RolePriceEGP           // admin-entered price in EGP (RolePrice = computed points)
     };
+
+    /** EGP → customer points using the live recycle point value. */
+    Q_INVOKABLE int egpToPoints(int egp) const;
 
     explicit ProductsModel(QObject *parent = nullptr);
     static ProductsModel *create(QQmlEngine *, QJSEngine *) { return s_instance; }
@@ -110,6 +120,9 @@ private:
 
     QList<Row> m_rows;
     Database  *m_db = nullptr;
+    double     m_pointRate = 0.4;   // EGP per point (recycle/pointValueEGP)
+
+    void refreshPointRate();
 };
 
 #endif // PRODUCTS_MODEL_H

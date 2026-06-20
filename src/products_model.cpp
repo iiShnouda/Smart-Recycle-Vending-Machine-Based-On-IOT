@@ -5,16 +5,33 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QJsonObject>
+#include <QSettings>
+#include <QtMath>
 
 ProductsModel *ProductsModel::s_instance = nullptr;
 
 ProductsModel::ProductsModel(QObject *parent) : QAbstractListModel(parent)
 {
     if (!s_instance) s_instance = this;
+    refreshPointRate();
     // Initialize 8 empty rows; admin can fill them in.
     for (int slot = 1; slot <= 8; ++slot) {
         m_rows.append({ slot, QString("Slot %1").arg(slot), 0, {}, false, 0, 0 });
     }
+}
+
+void ProductsModel::refreshPointRate()
+{
+    // 1 point is worth this many EGP (same setting the recycle side uses).
+    m_pointRate = QSettings().value("recycle/pointValueEGP", 0.4).toDouble();
+    if (m_pointRate <= 0.0) m_pointRate = 0.4;
+}
+
+int ProductsModel::egpToPoints(int egp) const
+{
+    if (egp <= 0) return 0;
+    // points = EGP / (EGP-per-point), rounded up so we never undercharge.
+    return (int)qCeil((double)egp / m_pointRate);
 }
 
 void ProductsModel::setDatabase(Database *db)
@@ -40,7 +57,8 @@ QVariant ProductsModel::data(const QModelIndex &index, int role) const
     switch (role) {
         case RoleSlot:           return r.slot;
         case RoleName:           return r.name;
-        case RolePrice:          return r.price;
+        case RolePrice:          return egpToPoints(r.price);   // customer pays points
+        case RolePriceEGP:       return r.price;                // admin typed EGP
         case RoleImage:          return r.imagePath;
         case RoleActive:         return r.active;
         case RoleCount:          return r.count;
@@ -59,6 +77,7 @@ QHash<int, QByteArray> ProductsModel::roleNames() const
         { RoleSlot,            "slot"           },
         { RoleName,            "name"           },
         { RolePrice,           "pricePoints"    },
+        { RolePriceEGP,        "priceEGP"       },
         { RoleImage,           "imagePath"      },
         { RoleActive,          "active"         },
         { RoleCount,           "count"          },
@@ -74,6 +93,7 @@ void ProductsModel::reload()
 {
     if (!m_db || !m_db->isOpen()) return;
 
+    refreshPointRate();   // pick up any change to the EGP↔points rate
     beginResetModel();
     m_rows.clear();
     // Ensure 8 slots exist in model even if DB is empty.
@@ -261,7 +281,8 @@ QJsonArray ProductsModel::productsArray() const
         arr.append(QJsonObject{
             { QStringLiteral("slot"),    r.slot },
             { QStringLiteral("name"),    r.name },
-            { QStringLiteral("points"),  r.price },
+            { QStringLiteral("points"),  egpToPoints(r.price) },  // what the app shows
+            { QStringLiteral("priceEGP"), r.price },
             { QStringLiteral("inStock"), r.count > 0 && r.active },
         });
     }

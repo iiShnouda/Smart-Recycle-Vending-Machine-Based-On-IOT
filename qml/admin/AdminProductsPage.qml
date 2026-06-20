@@ -75,28 +75,9 @@ Rectangle {
                                        duration: 500; easing.type: Easing.OutCubic; running: false } }
         }
 
-        // Scan-a-product button (top-right, left of reload)
-        Rectangle {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: 130
-            height: 80; radius: 40
-            width: scanRow.implicitWidth + 44
-            color: scanTap.pressed ? "#0E7490" : "#0891B2"
-            scale: scanTap.pressed ? 0.94 : 1.0
-            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
-            TapHandler { id: scanTap; onTapped: scanDialog.beginScan() }
-            Row {
-                id: scanRow
-                anchors.centerIn: parent
-                spacing: 8
-                Text { text: "📷"; font.pixelSize: 30
-                       anchors.verticalCenter: parent.verticalCenter }
-                Text { text: qsTr("Scan product"); color: "#FFFFFF"
-                       font.pixelSize: 18; font.weight: Font.ExtraBold
-                       anchors.verticalCenter: parent.verticalCenter }
-            }
-        }
+        // (Barcode "Scan product" camera removed — it didn't work reliably.
+        //  Configure slots by tapping them and typing the name; the name field
+        //  still searches Open Food Facts for the image.)
     }
 
     // ══════════════════════════ GRID ══════════════════════════
@@ -235,9 +216,13 @@ Rectangle {
                                anchors.horizontalCenter: parent.horizontalCenter
                                horizontalAlignment: Text.AlignHCenter
                                width: parent.width }
-                        Text { text: pricePoints + " " + qsTr("pts")
+                        Text { text: priceEGP + " " + qsTr("EGP")
                                color: "#0891B2"
                                font.pixelSize: 22; font.weight: Font.Black
+                               anchors.horizontalCenter: parent.horizontalCenter }
+                        Text { text: "= " + pricePoints + " " + qsTr("pts")
+                               color: "#5A6B52"
+                               font.pixelSize: 14; font.weight: Font.DemiBold
                                anchors.horizontalCenter: parent.horizontalCenter }
                     }
                 }
@@ -246,7 +231,7 @@ Rectangle {
                     onTapped: {
                         page.editingSlot   = slot
                         editName.text      = isEmpty ? "" : name
-                        editPrice.text     = pricePoints
+                        editPrice.text     = priceEGP
                         editImage.text     = imagePath
                         // A fresh slot defaults to Active — you're adding a
                         // product because you want customers to see it.
@@ -372,7 +357,7 @@ Rectangle {
                 }
             }
 
-            Text { text: qsTr("Price (points)"); font.pixelSize: 16; color: "#5A6B52" }
+            Text { text: qsTr("Price (EGP)"); font.pixelSize: 16; color: "#5A6B52" }
             TextField {
                 id: editPrice
                 width: parent.width
@@ -380,6 +365,14 @@ Rectangle {
                 validator: IntValidator { bottom: 0; top: 99999 }
                 font.pixelSize: 24
                 font.weight: Font.DemiBold
+                placeholderText: qsTr("e.g. 10")
+            }
+            // Live conversion — customers pay in points, not EGP.
+            Text {
+                text: qsTr("Customer pays ")
+                      + ProductsModel.egpToPoints(parseInt(editPrice.text || "0"))
+                      + qsTr(" points")
+                font.pixelSize: 15; color: "#0891B2"; font.weight: Font.Bold
             }
 
             Text { text: qsTr("Image"); font.pixelSize: 16; color: "#5A6B52" }
@@ -641,245 +634,6 @@ Rectangle {
                     color: "transparent"; border.width: 2; border.color: "#9CA3AF"
                     TapHandler { onTapped: calibratePrompt.close() }
                     Text { anchors.centerIn: parent; text: qsTr("Skip for now")
-                           color: "#5A6B52"; font.pixelSize: 20; font.weight: Font.Bold }
-                }
-            }
-        }
-    }
-
-    // ══════════════════════ SCAN A PRODUCT ══════════════════════
-    // Show the camera a product's barcode → Open Food Facts lookup → this
-    // popup shows the name + image, suggests an empty slot, and lets the
-    // admin set the points, then adds it. No URLs, no typing the name.
-    Dialog {
-        id: scanDialog
-        property string phase: "idle"   // scanning | looking | result | none | error
-        property string rName:    ""
-        property string rImage:   ""
-        property int    rWeight:  0
-        property string rBarcode: ""
-        property bool   found:    false
-        property string errMsg:   ""
-
-        function beginScan() {
-            phase = "scanning"
-            rName = ""; rImage = ""; rWeight = 0; rBarcode = ""; found = false; errMsg = ""
-            scanName.text = ""; scanPoints.text = ""
-            open()
-            BarcodeScanner.scan()
-        }
-
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        modal: true; focus: true
-        closePolicy: Popup.NoAutoClose
-        Overlay.modal: Rectangle { color: "#B0000000" }
-        width: 820; height: 980
-        standardButtons: Dialog.NoButton
-
-        Connections {
-            target: BarcodeScanner
-            function onScanned(code) {
-                scanDialog.rBarcode = code
-                scanDialog.phase = "looking"
-                OffClient.lookupBarcode(code)
-            }
-            function onNothingFound() { if (scanDialog.visible) scanDialog.phase = "none" }
-            function onFailed(msg) {
-                if (scanDialog.visible) { scanDialog.phase = "error"; scanDialog.errMsg = msg }
-            }
-        }
-        Connections {
-            target: OffClient
-            function onProductResolved(barcode, ok, product) {
-                if (!scanDialog.visible) return
-                scanDialog.found   = ok
-                scanDialog.rName   = ok ? (product.name    || "") : ""
-                scanDialog.rImage  = ok ? (product.imageUrl || "") : ""
-                scanDialog.rWeight = ok ? (product.weightG  || 0)  : 0
-                scanName.text = scanDialog.rName
-                var s = ProductsModel.firstEmptySlot()
-                scanSlot.value = s > 0 ? s : 1
-                scanDialog.phase = "result"
-            }
-        }
-
-        Column {
-            anchors.fill: parent
-            anchors.margins: 20
-            spacing: 16
-
-            // ── Busy phases ──
-            Column {
-                visible: scanDialog.phase === "scanning" || scanDialog.phase === "looking"
-                width: parent.width; spacing: 20
-                anchors.horizontalCenter: parent.horizontalCenter
-
-                // Live camera so the admin can aim the barcode. The scanner
-                // sidecar writes its frames to the same preview file the face
-                // provider reads (they never run at once).
-                Rectangle {
-                    visible: scanDialog.phase === "scanning"
-                    width: 640; height: 360; radius: 18
-                    color: "#1A1D1A"; clip: true
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    CameraPreview {
-                        anchors.fill: parent
-                        circular: false
-                        cornerRadius: 18
-                        fps: 12
-                        // Only pump frames while actually scanning — keeps the
-                        // dialog (created with the page) idle until opened.
-                        active: scanDialog.phase === "scanning"
-                    }
-                    // Aiming guide line down the middle.
-                    Rectangle { anchors.centerIn: parent; width: parent.width * 0.8
-                                height: 3; color: "#00E5FF"; opacity: 0.7 }
-                }
-
-                BusyIndicator { running: visible; width: 120; height: 120
-                                visible: scanDialog.phase === "looking"
-                                anchors.horizontalCenter: parent.horizontalCenter }
-                Text {
-                    text: scanDialog.phase === "scanning"
-                          ? qsTr("Hold the product's barcode up to the camera…")
-                          : qsTr("Looking it up…  (%1)").arg(scanDialog.rBarcode)
-                    color: "#1F2A1B"; font.pixelSize: 24; font.weight: Font.Bold
-                    horizontalAlignment: Text.AlignHCenter; width: parent.width
-                    wrapMode: Text.WordWrap
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-            }
-
-            // ── No barcode / error ──
-            Column {
-                visible: scanDialog.phase === "none" || scanDialog.phase === "error"
-                width: parent.width; spacing: 18
-                Text { text: "🤔"; font.pixelSize: 80
-                       anchors.horizontalCenter: parent.horizontalCenter }
-                Text {
-                    text: scanDialog.phase === "error"
-                          ? qsTr("Scanner problem: %1").arg(scanDialog.errMsg)
-                          : qsTr("Didn't catch a barcode. Try again, holding it steady and well-lit.")
-                    color: "#1F2A1B"; font.pixelSize: 20
-                    horizontalAlignment: Text.AlignHCenter; width: parent.width
-                    wrapMode: Text.WordWrap
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-            }
-
-            // ── Result ──
-            Item {
-                visible: scanDialog.phase === "result"
-                width: parent.width; height: 720
-
-                Column {
-                    anchors.fill: parent
-                    spacing: 14
-
-                    Text {
-                        text: scanDialog.found ? qsTr("Found it!")
-                                               : qsTr("Not in the database — fill it in")
-                        color: scanDialog.found ? "#16A34A" : "#92400E"
-                        font.pixelSize: 26; font.weight: Font.ExtraBold
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-
-                    Row {
-                        spacing: 16
-                        width: parent.width
-                        Rectangle {
-                            width: 150; height: 150; radius: 14
-                            color: "#E8EEDB"; border.width: 1; border.color: "#D8E0CF"
-                            Image { anchors.fill: parent; anchors.margins: 8
-                                    source: scanDialog.rImage
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: scanDialog.rImage.length > 0 }
-                            Text { anchors.centerIn: parent; text: "📷"; font.pixelSize: 48
-                                   visible: scanDialog.rImage.length === 0 }
-                        }
-                        Column {
-                            width: parent.width - 166
-                            spacing: 8
-                            Text { text: qsTr("Name"); color: "#5A6B52"; font.pixelSize: 14 }
-                            TextField { id: scanName; width: parent.width
-                                        placeholderText: qsTr("Product name"); font.pixelSize: 20 }
-                            Text { text: qsTr("Barcode: %1").arg(scanDialog.rBarcode)
-                                   color: "#9CA3AF"; font.pixelSize: 13 }
-                            Text { visible: scanDialog.rWeight > 0
-                                   text: qsTr("Weight: %1 g").arg(scanDialog.rWeight)
-                                   color: "#9CA3AF"; font.pixelSize: 13 }
-                        }
-                    }
-
-                    // Slot + points
-                    Row {
-                        spacing: 24; width: parent.width
-                        Column {
-                            spacing: 4
-                            Text { text: qsTr("Put in slot"); color: "#5A6B52"; font.pixelSize: 14 }
-                            SpinBox { id: scanSlot; from: 1; to: 8; value: 1; font.pixelSize: 22 }
-                        }
-                        Column {
-                            spacing: 4; width: parent.width - 220
-                            Text { text: qsTr("Price (points)"); color: "#5A6B52"; font.pixelSize: 14 }
-                            TextField {
-                                id: scanPoints; width: 200
-                                placeholderText: "50"
-                                inputMethodHints: Qt.ImhDigitsOnly
-                                validator: IntValidator { bottom: 0; top: 99999 }
-                                font.pixelSize: 22
-                            }
-                        }
-                    }
-                    Text {
-                        text: qsTr("Slot %1 is suggested (first empty). The image comes from the database; no calibration needed to start selling.")
-                                  .arg(scanSlot.value)
-                        color: "#5A6B52"; font.pixelSize: 13; wrapMode: Text.WordWrap
-                        width: parent.width
-                    }
-                }
-            }
-
-            // ── Buttons ──
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 16
-
-                Rectangle {
-                    visible: scanDialog.phase === "result"
-                    width: 320; height: 76; radius: 38
-                    color: scanName.text.trim().length > 0 ? "#16A34A" : "#9CA3AF"
-                    TapHandler {
-                        enabled: scanName.text.trim().length > 0
-                        onTapped: {
-                            ProductsModel.setProduct(
-                                scanSlot.value, scanName.text.trim(),
-                                parseInt(scanPoints.text || "0"),
-                                scanDialog.rImage, true)
-                            ProductsModel.reload()
-                            scanDialog.close()
-                        }
-                    }
-                    Text { anchors.centerIn: parent
-                           text: qsTr("Add to slot %1").arg(scanSlot.value)
-                           color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.ExtraBold }
-                }
-                Rectangle {
-                    visible: scanDialog.phase === "none" || scanDialog.phase === "error"
-                    width: 220; height: 76; radius: 38; color: "#0891B2"
-                    TapHandler { onTapped: scanDialog.beginScan() }
-                    Text { anchors.centerIn: parent; text: qsTr("Try again")
-                           color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.ExtraBold }
-                }
-                Rectangle {
-                    width: 200; height: 76; radius: 38
-                    color: "transparent"; border.width: 2; border.color: "#9CA3AF"
-                    TapHandler {
-                        onTapped: { BarcodeScanner.cancel(); scanDialog.close() }
-                    }
-                    Text { anchors.centerIn: parent
-                           text: scanDialog.phase === "result" ? qsTr("Cancel") : qsTr("Close")
                            color: "#5A6B52"; font.pixelSize: 20; font.weight: Font.Bold }
                 }
             }
