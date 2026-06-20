@@ -25,8 +25,10 @@ class RecycleClassifier;
  * Owns:
  *   - TranslationManager    (UI language switching)
  *   - Serial_Connection     (lives on its own QThread; talks to STM32)
+ *   - Serial_Connection     (second worker, on its own QThread; talks to the
+ *                            recycle Arduino over the Pi's GPIO UART)
  *
- * Bridges QML calls to the serial worker via QMetaObject::invokeMethod
+ * Bridges QML calls to the serial workers via QMetaObject::invokeMethod
  * (queued connection) so the GUI never blocks.
  */
 class ApplicationManager : public QObject {
@@ -38,6 +40,7 @@ class ApplicationManager : public QObject {
     Q_PROPERTY(bool    presence        READ presence WRITE setPresence NOTIFY presenceChanged)
     Q_PROPERTY(QString kioskId         READ kioskId    CONSTANT)
     Q_PROPERTY(QString kioskName       READ kioskName  NOTIFY kioskNameChanged)
+    Q_PROPERTY(bool    arduinoConnected READ arduinoConnected NOTIFY arduinoConnectedChanged)
 
 public:
     explicit ApplicationManager(QObject *parent = nullptr);
@@ -61,6 +64,12 @@ public:
     QString kioskId()    const { return m_kioskId; }
     QString kioskName()  const { return m_kioskName; }
 
+    /** True once the recycle Arduino (conveyor + 5 IR sensors, on the Pi's
+     *  GPIO UART) has completed its serial handshake. Drives the
+     *  connection-status chip on the diagnostics page. Independent of the
+     *  STM32 link (presence()/serialConnected above is STM32-only). */
+    bool arduinoConnected() const { return m_arduinoConnected; }
+
 public slots:
     void selectLanguage(const QString &languageCode);
     void setPresence(bool present);
@@ -73,6 +82,13 @@ public slots:
      *  All STM32-side logic — stepper rotations, servo angles, load-cell
      *  reads — is invoked through this single channel. */
     Q_INVOKABLE void sendSerial(const QString &command, int timeoutMs = -1);
+
+    /** Send a command to the recycle Arduino (conveyor + 5 IR sensors),
+     *  wired to the Pi's GPIO UART (/dev/serial0) — separate from the
+     *  STM32, which owns the USB-CDC link.
+     *  Omit timeoutMs (or pass 0/-1) to use the default 500 ms ACK window.
+     *  Mirrors sendSerial() but targets the second worker thread. */
+    Q_INVOKABLE void sendArduino(const QString &command, int timeoutMs = -1);
 
     // ---- Admin gate (callable from QML) ----
     /** Manually trigger the admin gate — used for desktop testing. */
@@ -106,7 +122,7 @@ public slots:
     Q_INVOKABLE void    publishMachineState();
     /** Admin sets the machine's name/location + deployed/in-service flags. */
     Q_INVOKABLE void    setMachineInfo(const QString &name, const QString &location,
-                                       bool deployed, bool inService);
+                                    bool deployed, bool inService);
     Q_INVOKABLE QString machineName()      const;
     Q_INVOKABLE QString machineLocation()  const;
     Q_INVOKABLE bool    machineDeployed()  const;
@@ -128,6 +144,10 @@ signals:
     void serialCommandFailed   (const QString &command, const QString &reason);
     void serialError(const QString &message);
 
+    /** Recycle Arduino link state — separate from the STM32's serialConnected/
+     *  serialDisconnected above, since the two boards connect independently. */
+    void arduinoConnectedChanged(bool connected);
+
     /** Reed sensor / admin lifecycle */
     void adminRequested();    // magnet removed — QML should push AdminGatePage
 
@@ -143,14 +163,24 @@ private slots:
     void onSerialCommandFailed   (const QString &command, const QString &reason);
     void onSerialError           (const QString &message);
 
+    // Recycle Arduino link handlers (separate worker — see m_arduino below)
+    void onArduinoConnected();
+    void onArduinoDisconnected();
+
 private:
     TranslationManager *m_translationManager = nullptr;
     QQmlEngine         *m_qmlEngine          = nullptr;
     bool                m_presence           = true;
 
-    // Serial worker on its own thread.
+    // Serial worker on its own thread (STM32, USB-CDC).
     QThread           *m_serialThread = nullptr;
     Serial_Connection *m_serial       = nullptr;
+
+    // Second serial worker for the recycle Arduino, on the Pi's GPIO UART
+    // (/dev/serial0) — the STM32 already owns the only USB port.
+    QThread           *m_arduinoThread = nullptr;
+    Serial_Connection *m_arduino       = nullptr;
+    bool               m_arduinoConnected = false;
 
     // Cabinet LEDs (relays 1+2): on with any activity, off after 5 min idle.
     class QTimer      *m_ledTimer     = nullptr;

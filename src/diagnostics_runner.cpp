@@ -25,6 +25,16 @@ void DiagnosticsRunner::send(const QString &cmd, int timeoutMs)
     app->sendSerial(cmd, timeoutMs);
 }
 
+// Routes to the recycle Arduino (conveyor + 5 IR sensors) instead of the
+// STM32. That hardware moved off the STM32 onto the Arduino — see
+// rewingo_recycle.ino, which owns IR/CONVEYOR on its own command set.
+void DiagnosticsRunner::sendArduino(const QString &cmd, int timeoutMs)
+{
+    auto *app = ApplicationManager::s_instance;
+    if (!app) return;
+    app->sendArduino(cmd, timeoutMs);
+}
+
 void DiagnosticsRunner::record(const QString &cmd, bool ok, const QString &reply)
 {
     QVariantMap entry;
@@ -74,7 +84,10 @@ QString DiagnosticsRunner::relayCmd(int idx, bool on)
 // ── Tests ────────────────────────────────────────────────────────────────────
 void DiagnosticsRunner::testPing() { send(QStringLiteral("PING"), 500); }
 
-void DiagnosticsRunner::testIr()   { send(QStringLiteral("IR"), 800); }   // → "OK IR:0x1F"
+// CHANGED: the 5 IR sensors (inlet break-beam, etc.) live on the recycle
+// Arduino now, not the STM32. Its "IR" handler replies "OK IR:0x<mask>"
+// (5-bit hex, bit i = sensor i asserted). Route there instead of the STM32.
+void DiagnosticsRunner::testIr()   { sendArduino(QStringLiteral("IR"), 800); }
 
 void DiagnosticsRunner::testMotor(int slot)
 {
@@ -82,11 +95,12 @@ void DiagnosticsRunner::testMotor(int slot)
     send(motorCmd(slot), 15000);          // a full revolution takes a few seconds
 }
 
+// CHANGED: the recycle belt (TB6600/TP6600 + NEMA23) is driven by the
+// Arduino now, not the STM32. Its "CONVEYOR" handler runs the belt for
+// CONVEYOR_TEST_MS (~3s) and replies "Done CONVEYOR".
 void DiagnosticsRunner::testConveyor()
 {
-    // Recycle belt self-test: the firmware runs it ~2 s then replies
-    // "Done CONVEYOR" (h_conveyor → Recycle_RequestConveyorTest).
-    send(QStringLiteral("CONVEYOR"), 15000);
+    sendArduino(QStringLiteral("CONVEYOR"), 15000);
 }
 
 void DiagnosticsRunner::testCell(int slot)
@@ -115,6 +129,9 @@ void DiagnosticsRunner::testRunAll()
 {
     // Only the quick, side-effect-free checks. Motors, conveyor, relays and
     // the servo are fired individually so the operator watches each one move.
+    // Note: this now reaches both the STM32 (PING, WEIGH_ALL, DOOR) and the
+    // Arduino (IR) — if the Arduino link isn't up yet, the IR row will show
+    // a failure/timeout even though the STM32 checks pass.
     testPing();
     testIr();
     testCell(1);     // one WEIGH_ALL fills all 8 cell rows

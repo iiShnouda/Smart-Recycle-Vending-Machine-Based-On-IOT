@@ -56,6 +56,12 @@ ApplicationManager::~ApplicationManager()
         m_serialThread->quit();      // ask the event loop to exit
         m_serialThread->wait(2000);  // join (max 2 s)
     }
+    if (m_arduinoThread) {
+        if (m_arduino)
+            QMetaObject::invokeMethod(m_arduino, "stop", Qt::BlockingQueuedConnection);
+        m_arduinoThread->quit();
+        m_arduinoThread->wait(2000);
+    }
     if (s_instance == this) s_instance = nullptr;
 }
 
@@ -153,6 +159,45 @@ void ApplicationManager::initialize()
                               Q_ARG(QString, "AUTO"),
                               Q_ARG(int,     115200));
 
+    // ── Second serial worker: recycle Arduino on the Pi's GPIO UART ──────
+    // The STM32 owns the only USB port, so the recycle Arduino is wired to the
+    // Pi's hardware UART (GPIO14 TXD / GPIO15 RXD → /dev/serial0). Same
+    // Serial_Connection class, but a FIXED device path (no USB VID:PID to
+    // auto-detect). Override the port via QSettings "arduino/port".
+    m_arduinoThread = new QThread(this);
+    m_arduino       = new Serial_Connection();          // no parent (moveToThread)
+    m_arduino->moveToThread(m_arduinoThread);
+    connect(m_arduinoThread, &QThread::finished,
+            m_arduino,       &QObject::deleteLater);
+    m_arduinoThread->start();
+    const QString arduinoPort = QSettings().value("arduino/port", "/dev/serial0").toString();
+    QMetaObject::invokeMethod(m_arduino, "start", Qt::QueuedConnection,
+                              Q_ARG(QString, arduinoPort),
+                              Q_ARG(int,     115200));
+    // Arduino command replies (Done CONVEYOR, OK IR, …) feed the same
+    // diagnostics handlers as the STM32 ones.
+    connect(m_arduino, &Serial_Connection::commandSucceeded,
+            this,      &ApplicationManager::onSerialCommandSucceeded);
+    connect(m_arduino, &Serial_Connection::commandFailed,
+            this,      &ApplicationManager::onSerialCommandFailed);
+    m_arduinoThread->start();
+    const QString ardPort = QSettings().value("arduino/port", "/dev/serial0").toString();
+    QMetaObject::invokeMethod(m_arduino, "start", Qt::QueuedConnection,
+                              Q_ARG(QString, ardPort),
+                              Q_ARG(int,     115200));
+    // Arduino command replies (Done CONVEYOR, OK IR, …) feed the same
+    // diagnostics handlers as the STM32 ones.
+    connect(m_arduino, &Serial_Connection::commandSucceeded,
+            this,      &ApplicationManager::onSerialCommandSucceeded);
+    connect(m_arduino, &Serial_Connection::commandFailed,
+            this,      &ApplicationManager::onSerialCommandFailed);
+    // Link state, tracked separately from the STM32's — drives
+    // arduinoConnected for the diagnostics page's status chip.
+    connect(m_arduino, &Serial_Connection::connected,
+            this,      &ApplicationManager::onArduinoConnected);
+    connect(m_arduino, &Serial_Connection::disconnected,
+            this,      &ApplicationManager::onArduinoDisconnected);
+
     // ── Logger ──────────────────────────────────────────────────────────
     {
         const QString dataDir = QStandardPaths::writableLocation(
@@ -221,17 +266,25 @@ void ApplicationManager::initialize()
             });
 
     // ── Recycle session ────────────────────────────────────────────────
-    // The recycle counter (RecycleSession) is driven by the STM32's EVT
+    // The recycle counter (RecycleSession) is driven by the Arduino's EVT
     // lines and sends RECYCLE/VERDICT/BASKETS back out over serial.
     new RecycleSession(this);
     if (RecycleSession::s_instance) {
-        connect(this, &ApplicationManager::serialReply,
+        // Recycle runs on the ARDUINO (Pi GPIO UART), not the STM32. Feed its
+        // EVT,* lines in, and route RECYCLE/VERDICT/BASKETS back out to it.
+        connect(m_arduino, &Serial_Connection::replyReceived,
                 RecycleSession::s_instance, &RecycleSession::onSerialLine);
         connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
-                this, [this](const QString &cmd){ sendSerial(cmd, 0); });
+                this, [this](const QString &cmd){
+                    if (!m_arduino) return;
+                    QMetaObject::invokeMethod(m_arduino, "sendCommand",
+                                              Qt::QueuedConnection,
+                                              Q_ARG(QString, cmd),
+                                              Q_ARG(int, 3000));
+                });
 
         // Camera "brain": EVT,CAMERA → run the headless recycle classifier
-        // (CSI cam + YOLO) → send VERDICT BOTTLE|CAN|REJECT back to the STM32.
+        // (CSI cam + YOLO) → send VERDICT BOTTLE|CAN|REJECT back to the Arduino.
         m_recycleClassifier = new RecycleClassifier(this);
         connect(RecycleSession::s_instance, &RecycleSession::cameraRequested,
                 m_recycleClassifier, &RecycleClassifier::classify);
@@ -465,6 +518,16 @@ void ApplicationManager::sendSerial(const QString &command, int timeoutMs)
                               Q_ARG(int,     timeoutMs));
 }
 
+void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
+{
+    if (!m_arduino) return;
+    if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
+
+    QMetaObject::invokeMethod(m_arduino, "sendCommand", Qt::QueuedConnection,
+                              Q_ARG(QString, command),
+                              Q_ARG(int,     timeoutMs));
+}
+
 void ApplicationManager::setCabinetLeds(bool on)
 {
     if (m_ledsOn == on) return;
@@ -539,6 +602,20 @@ void ApplicationManager::onSerialDisconnected()
 {
     qWarning() << "[App] STM32 disconnected";
     emit serialDisconnected();
+}
+
+void ApplicationManager::onArduinoConnected()
+{
+    qInfo() << "[App] Recycle Arduino connected";
+    m_arduinoConnected = true;
+    emit arduinoConnectedChanged(true);
+}
+
+void ApplicationManager::onArduinoDisconnected()
+{
+    qWarning() << "[App] Recycle Arduino disconnected";
+    m_arduinoConnected = false;
+    emit arduinoConnectedChanged(false);
 }
 
 void ApplicationManager::onSerialReply(const QString &reply)

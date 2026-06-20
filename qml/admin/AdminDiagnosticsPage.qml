@@ -4,7 +4,8 @@ import Recycle_Vending_Machine_LCD
 
 /*
  * AdminDiagnosticsPage — hardware self-test. Every actuator and sensor on the
- * STM32 board has a button here; results come back as OK/FAIL chips.
+ * STM32 board (plus the recycle Arduino) has a button here; results come
+ * back as OK/FAIL chips.
  *
  * Each row's `cmd` MUST equal the exact wire string DiagnosticsRunner sends,
  * because results are keyed by that string (see DiagnosticsRunner::record).
@@ -50,22 +51,34 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 30
             spacing: 10
+
+            // Arduino link status — separate board, separate connection,
+            // so it gets its own indicator rather than implying it's part
+            // of the STM32 link.
             Rectangle {
-                width: 160; height: 80; radius: 40
-                color: runAllTap.pressed ? "#0E7490" : "#0891B2"
-                scale: runAllTap.pressed ? 0.93 : 1.0
-                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutBack } }
-                TapHandler { id: runAllTap; onTapped: Diagnostics.testRunAll() }
+                width: 200; height: 80; radius: 40
+                color: "transparent"
+                border.width: 2
+                border.color: AppManager.arduinoConnected ? "#16A34A" : "#DC2626"
                 Row {
-                    anchors.centerIn: parent; spacing: 8
-                    Text { text: "▶"; color: "#FFFFFF"
-                           font.pixelSize: 24; font.weight: Font.Black
-                           anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: qsTr("Run all"); color: "#FFFFFF"
-                           font.pixelSize: 20; font.weight: Font.ExtraBold
-                           anchors.verticalCenter: parent.verticalCenter }
+                    anchors.centerIn: parent
+                    spacing: 10
+                    Rectangle {
+                        width: 14; height: 14; radius: 7
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: AppManager.arduinoConnected ? "#16A34A" : "#DC2626"
+                    }
+                    Text {
+                        text: AppManager.arduinoConnected
+                              ? qsTr("Arduino linked")
+                              : qsTr("Arduino offline")
+                        color: "#FFFFFF"
+                        font.pixelSize: 16; font.weight: Font.ExtraBold
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
+
             Rectangle {
                 width: 80; height: 80; radius: 40
                 color: "transparent"
@@ -177,7 +190,9 @@ Rectangle {
                       onTriggered: Diagnostics.testDoor() }
 
             // ── IR sensors (one command returns a 5-bit mask) ──
-            SectionHeader { title: qsTr("IR sensors"); note: qsTr("F1–F5 inlet / lane beams") }
+            SectionHeader { title: qsTr("IR sensors")
+                            note: (AppManager.arduinoConnected ? qsTr("F1–F5 inlet / lane beams")
+                                                               : qsTr("Arduino offline — check the GPIO UART link")) }
             Rectangle {
                 id: irCard
                 width: parent.width; height: 120; radius: 18
@@ -243,7 +258,8 @@ Rectangle {
 
             // ── Conveyor (recycle belt) ──
             SectionHeader { title: qsTr("Recycle conveyor")
-                            note: qsTr("⚠ 12 V belt PSU on") }
+                            note: (AppManager.arduinoConnected ? qsTr("⚠ 12 V belt PSU on")
+                                                               : qsTr("Arduino offline — check the GPIO UART link")) }
             TestRow {
                 label: qsTr("Belt")
                 cmd: "CONVEYOR"
