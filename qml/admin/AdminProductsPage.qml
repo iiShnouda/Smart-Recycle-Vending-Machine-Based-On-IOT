@@ -233,10 +233,11 @@ Rectangle {
                         editName.text      = isEmpty ? "" : name
                         editPrice.text     = priceEGP
                         editImage.text     = imagePath
-                        // A fresh slot defaults to Active — you're adding a
-                        // product because you want customers to see it.
-                        editActive.checked = isEmpty ? true : isActive
-                        editInStock.checked = count > 0          // default OUT of stock
+                        // A fresh slot defaults to Active AND In-stock — you're
+                        // configuring it because you just loaded the product, so
+                        // it should be immediately buyable in vending.
+                        editActive.checked  = isEmpty ? true : isActive
+                        editInStock.checked = isEmpty ? true : (count > 0)
                         editDialog.nameCandidates = []
                         editDialog.open()
                     }
