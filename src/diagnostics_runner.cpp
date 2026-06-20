@@ -7,9 +7,11 @@
 
 DiagnosticsRunner *DiagnosticsRunner::s_instance = nullptr;
 
-// One mechanical revolution of the TMC2209 at 1/256 microstepping:
-// 200 full steps × 256 = 51200 microsteps (see STEPPER_STEPS_PER_REV, firmware).
-static constexpr int kStepsPerRev = 51200;
+// One mechanical revolution of the TMC2209 in standalone 1/8 microstepping
+// (MS1=MS2=GND): 200 full steps × 8 = 1600 step pulses (see
+// STEPPER_STEPS_PER_REV, firmware). Must match the firmware or the test spins
+// the wrong number of turns.
+static constexpr int kStepsPerRev = 1600;
 
 DiagnosticsRunner::DiagnosticsRunner(QObject *parent) : QObject(parent)
 {

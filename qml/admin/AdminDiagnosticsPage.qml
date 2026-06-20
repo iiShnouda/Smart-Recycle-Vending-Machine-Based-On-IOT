@@ -264,9 +264,9 @@ Rectangle {
             // ── Relays (lights) — On/Off per channel ──
             SectionHeader { title: qsTr("Relays / lights") }
             Repeater {
-                model: [ { lbl: qsTr("Vending light"), idx: 1 },
-                         { lbl: qsTr("Bottom LED"),    idx: 2 },
-                         { lbl: qsTr("Recycle lane"),  idx: 3 } ]
+                model: [ { lbl: qsTr("Relay 1 (PA9)"),     idx: 1 },
+                         { lbl: qsTr("Bottom LED (PA10)"), idx: 2 },
+                         { lbl: qsTr("Vending (PB8)"),     idx: 3 } ]
                 delegate: Rectangle {
                     required property var modelData
                     width: parent.width; height: 88; radius: 18
