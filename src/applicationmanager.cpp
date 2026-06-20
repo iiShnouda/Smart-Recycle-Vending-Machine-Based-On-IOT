@@ -520,6 +520,17 @@ void ApplicationManager::sendSerial(const QString &command, int timeoutMs)
 
 void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
 {
+    // Recycle Arduino on the Pi GPIO UART. Used by the recycle flow and the
+    // diagnostics conveyor/IR tests (those moved off the STM32).
+    if (!m_arduino) return;
+    if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
+    QMetaObject::invokeMethod(m_arduino, "sendCommand", Qt::QueuedConnection,
+                              Q_ARG(QString, command),
+                              Q_ARG(int,     timeoutMs));
+}
+
+void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
+{
     if (!m_arduino) return;
     if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
 
