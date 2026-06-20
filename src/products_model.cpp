@@ -121,11 +121,20 @@ void ProductsModel::reload()
     endResetModel();
 }
 
-bool ProductsModel::setProduct(int slot, const QString &name, int pricePoints,
+bool ProductsModel::setProduct(int slot, const QString &name, int priceEGP,
                                const QString &imagePath, bool active)
 {
-    if (!m_db || slot < 1 || slot > 8) return false;
-    const bool ok = m_db->upsertProduct(slot, name, pricePoints, imagePath, active);
+    if (!m_db || slot < 1 || slot > 8) {
+        Logger::warn("Products",
+                     QString("setProduct ignored: slot=%1 db=%2")
+                         .arg(slot).arg(m_db ? "ok" : "NULL"));
+        return false;
+    }
+    const bool ok = m_db->upsertProduct(slot, name, priceEGP, imagePath, active);
+    Logger::info("Products",
+                 QString("setProduct slot=%1 name=%2 egp=%3 active=%4 -> %5")
+                     .arg(slot).arg(name).arg(priceEGP).arg(active)
+                     .arg(ok ? "saved" : "FAILED"));
     if (ok) reload();
     return ok;
 }

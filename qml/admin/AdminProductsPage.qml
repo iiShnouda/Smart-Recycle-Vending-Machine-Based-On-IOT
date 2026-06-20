@@ -258,7 +258,8 @@ Rectangle {
         focus: true
         closePolicy: Popup.CloseOnEscape
         Overlay.modal: Rectangle { color: "#B0000000" }
-        standardButtons: Dialog.Save | Dialog.Cancel
+        // Save/Cancel are an explicit custom footer (see below) — not
+        // standardButtons, which weren't firing on the kiosk.
 
         // Inline product search (Open Food Facts) as the admin types the name.
         property var  nameCandidates: []
@@ -413,16 +414,42 @@ Rectangle {
             }
         }
 
-        onAccepted: {
-            ProductsModel.setProduct(
-                page.editingSlot,
-                editName.text,
-                parseInt(editPrice.text || "0"),
-                editImage.text,
-                editActive.checked
-            )
+        // Explicit footer buttons. The Dialog's standardButtons weren't firing
+        // onAccepted on the kiosk (so nothing ever saved); a tap here calls the
+        // save directly.
+        footer: Rectangle {
+            implicitHeight: 104
+            color: "transparent"
+            Row {
+                anchors.centerIn: parent
+                spacing: 16
+                Rectangle {
+                    width: 320; height: 76; radius: 38
+                    color: editName.text.trim().length > 0 ? "#16A34A" : "#9CA3AF"
+                    TapHandler {
+                        enabled: editName.text.trim().length > 0
+                        onTapped: editDialog.saveSlot()
+                    }
+                    Text { anchors.centerIn: parent; text: qsTr("Save")
+                           color: "#FFFFFF"; font.pixelSize: 24; font.weight: Font.ExtraBold }
+                }
+                Rectangle {
+                    width: 200; height: 76; radius: 38
+                    color: "transparent"; border.width: 2; border.color: "#9CA3AF"
+                    TapHandler { onTapped: editDialog.close() }
+                    Text { anchors.centerIn: parent; text: qsTr("Cancel")
+                           color: "#5A6B52"; font.pixelSize: 22; font.weight: Font.Bold }
+                }
+            }
+        }
+
+        function saveSlot() {
+            ProductsModel.setProduct(page.editingSlot, editName.text.trim(),
+                                     parseInt(editPrice.text || "0"),
+                                     editImage.text, editActive.checked)
             ProductsModel.setInStock(page.editingSlot, editInStock.checked)
             ProductsModel.reload()
+            editDialog.close()
         }
     }
 
