@@ -180,17 +180,6 @@ void ApplicationManager::initialize()
             this,      &ApplicationManager::onSerialCommandSucceeded);
     connect(m_arduino, &Serial_Connection::commandFailed,
             this,      &ApplicationManager::onSerialCommandFailed);
-    m_arduinoThread->start();
-    const QString ardPort = QSettings().value("arduino/port", "/dev/serial0").toString();
-    QMetaObject::invokeMethod(m_arduino, "start", Qt::QueuedConnection,
-                              Q_ARG(QString, ardPort),
-                              Q_ARG(int,     115200));
-    // Arduino command replies (Done CONVEYOR, OK IR, …) feed the same
-    // diagnostics handlers as the STM32 ones.
-    connect(m_arduino, &Serial_Connection::commandSucceeded,
-            this,      &ApplicationManager::onSerialCommandSucceeded);
-    connect(m_arduino, &Serial_Connection::commandFailed,
-            this,      &ApplicationManager::onSerialCommandFailed);
     // Link state, tracked separately from the STM32's — drives
     // arduinoConnected for the diagnostics page's status chip.
     connect(m_arduino, &Serial_Connection::connected,
@@ -524,16 +513,6 @@ void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
     // diagnostics conveyor/IR tests (those moved off the STM32).
     if (!m_arduino) return;
     if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
-    QMetaObject::invokeMethod(m_arduino, "sendCommand", Qt::QueuedConnection,
-                              Q_ARG(QString, command),
-                              Q_ARG(int,     timeoutMs));
-}
-
-void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
-{
-    if (!m_arduino) return;
-    if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
-
     QMetaObject::invokeMethod(m_arduino, "sendCommand", Qt::QueuedConnection,
                               Q_ARG(QString, command),
                               Q_ARG(int,     timeoutMs));
