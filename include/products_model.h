@@ -122,6 +122,14 @@ private:
     Database  *m_db = nullptr;
     double     m_pointRate = 0.4;   // EGP per point (recycle/pointValueEGP)
 
+    /** Guarantee m_db is set. setDatabase() is called from ApplicationManager
+     *  during init, but the QML singleton instance that QML actually uses can
+     *  end up being a different object than the one set up there — leaving
+     *  m_db null and silently dropping every save ("db=NULL"). This lazily
+     *  pulls the DB from ApplicationManager::s_instance the first time any DB
+     *  operation runs, so saves always work. Returns true if a DB is available. */
+    bool ensureDb();
+
     void refreshPointRate();
 };
 

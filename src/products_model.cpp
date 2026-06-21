@@ -1,6 +1,7 @@
 #include "../include/products_model.h"
 #include "../include/database.h"
 #include "../include/logger.h"
+#include "../include/applicationmanager.h"
 
 #include <QSqlQuery>
 #include <QSqlError>
@@ -36,11 +37,28 @@ int ProductsModel::egpToPoints(int egp) const
 
 void ProductsModel::setDatabase(Database *db)
 {
+    if (db == m_db) return;
     m_db = db;
     if (m_db) {
-        connect(m_db, &Database::productsChanged, this, &ProductsModel::reload);
+        connect(m_db, &Database::productsChanged, this, &ProductsModel::reload,
+                Qt::UniqueConnection);
         reload();
     }
+}
+
+bool ProductsModel::ensureDb()
+{
+    if (m_db) return true;
+    // The DB wasn't wired onto this (QML singleton) instance — pull it from the
+    // app and wire it now, so the very first save still persists.
+    if (ApplicationManager::s_instance) {
+        Database *db = ApplicationManager::s_instance->database();
+        if (db) {
+            setDatabase(db);
+            Logger::info("Products", "ensureDb: recovered DB from ApplicationManager");
+        }
+    }
+    return m_db != nullptr;
 }
 
 int ProductsModel::rowCount(const QModelIndex &parent) const
@@ -91,7 +109,7 @@ QHash<int, QByteArray> ProductsModel::roleNames() const
 
 void ProductsModel::reload()
 {
-    if (!m_db || !m_db->isOpen()) return;
+    if (!ensureDb() || !m_db->isOpen()) return;
 
     refreshPointRate();   // pick up any change to the EGP↔points rate
     beginResetModel();
@@ -124,7 +142,7 @@ void ProductsModel::reload()
 bool ProductsModel::setProduct(int slot, const QString &name, int priceEGP,
                                const QString &imagePath, bool active)
 {
-    if (!m_db || slot < 1 || slot > 8) {
+    if (!ensureDb() || slot < 1 || slot > 8) {
         Logger::warn("Products",
                      QString("setProduct ignored: slot=%1 db=%2")
                          .arg(slot).arg(m_db ? "ok" : "NULL"));
@@ -141,7 +159,7 @@ bool ProductsModel::setProduct(int slot, const QString &name, int priceEGP,
 
 bool ProductsModel::updateInventory(int slot, int count, int weightG)
 {
-    if (!m_db || slot < 1 || slot > 8) return false;
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
     const bool ok = m_db->setProductCount(slot, count, weightG);
     if (ok) {
         Row &r = m_rows[slot - 1];
@@ -155,7 +173,7 @@ bool ProductsModel::updateInventory(int slot, int count, int weightG)
 
 bool ProductsModel::setActive(int slot, bool active)
 {
-    if (!m_db || slot < 1 || slot > 8) return false;
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
     const bool ok = m_db->setProductActive(slot, active);
     if (ok) {
         Row &r = m_rows[slot - 1];
@@ -168,7 +186,7 @@ bool ProductsModel::setActive(int slot, bool active)
 
 bool ProductsModel::setInStock(int slot, bool inStock)
 {
-    if (!m_db || slot < 1 || slot > 8) return false;
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
     const int count = inStock ? 99 : 0;     // simple admin stock, no load cell
     Row &r = m_rows[slot - 1];
     r.count = count;
@@ -230,7 +248,7 @@ int ProductsModel::ingestRawReading(int slot, int raw, const QString &source)
 
 bool ProductsModel::calibrateEmptyShelf(int slot, int currentRaw)
 {
-    if (!m_db || slot < 1 || slot > 8) return false;
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
     if (!m_db->setEmptyShelfRaw(slot, currentRaw)) return false;
     m_rows[slot - 1].emptyShelfRaw = currentRaw;
     const QModelIndex idx = index(slot - 1);
@@ -240,7 +258,7 @@ bool ProductsModel::calibrateEmptyShelf(int slot, int currentRaw)
 
 bool ProductsModel::calibrateUnitWeight(int slot, int currentRaw, int knownCount)
 {
-    if (!m_db || slot < 1 || slot > 8 || knownCount <= 0) return false;
+    if (!ensureDb() || slot < 1 || slot > 8 || knownCount <= 0) return false;
     Row &r = m_rows[slot - 1];
     const int delta = currentRaw - r.emptyShelfRaw;
     if (delta <= 0) return false;          // shelf reads lighter than empty?

@@ -64,6 +64,12 @@ public:
     QString kioskId()    const { return m_kioskId; }
     QString kioskName()  const { return m_kioskName; }
 
+    /** The shared SQLite database (created in initialize()). Used as a
+     *  fallback by QML singletons (e.g. ProductsModel) whose own setDatabase()
+     *  may race the QML singleton's create(), so they can always reach the DB
+     *  via ApplicationManager::s_instance->database(). */
+    Database *database() const { return m_database; }
+
     /** True once the recycle Arduino (conveyor + 5 IR sensors, USB-CDC,
      *  auto-detected by VID:PID) has completed its serial handshake.
      *  Drives the connection-status chip on the diagnostics page.
