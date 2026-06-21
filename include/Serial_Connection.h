@@ -113,6 +113,13 @@ private:
     quint16 m_targetVid = STM32_VID;
     quint16 m_targetPid = STM32_PID;
 
+    // "AUTO:OTHER" mode — match the first USB-CDC port whose VID:PID is NOT
+    // the STM32's. Used for the recycle Arduino when its exact VID:PID is
+    // unknown (clone boards use CH340 1a86:7523, FTDI 0403:6001, etc.), so we
+    // can't hard-code it: "the serial device that isn't the STM32" is robust
+    // regardless of which Arduino/clone is plugged in. Set by parseAutoSpec().
+    bool m_matchOther = false;
+
     // One command in-flight at a time (waiting for the board's reply)
     struct PendingCommand {
         QString command;

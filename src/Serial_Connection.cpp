@@ -81,11 +81,22 @@ void Serial_Connection::sendCommand(const QString &command, int timeoutMs)
 
 bool Serial_Connection::parseAutoSpec(const QString &portName)
 {
+    // Reset the exclude-mode flag; re-set below only for "AUTO:OTHER".
+    m_matchOther = false;
+
     // Bare "AUTO" (or a literal path, or empty) → keep current m_targetVid/Pid
     // (which start out as the STM32 defaults from the in-class initializer,
     // and otherwise just retain whatever was set on a previous start() call).
     if (!portName.startsWith("AUTO:", Qt::CaseInsensitive))
         return true;
+
+    // "AUTO:OTHER" → match the first serial port that is NOT the STM32.
+    // Robust when the second board's exact VID:PID is unknown (clone Arduinos
+    // vary). findPortByVidPid() honours m_matchOther.
+    if (portName.compare("AUTO:OTHER", Qt::CaseInsensitive) == 0) {
+        m_matchOther = true;
+        return true;
+    }
 
     const QStringList parts = portName.split(':');
     if (parts.size() != 3) {
@@ -141,9 +152,14 @@ void Serial_Connection::openPort()
 
     if (port.isEmpty()) {
         if (!s_warnedNoPort) {
-            qWarning() << "[Serial] No device detected for VID:PID"
-                       << Qt::hex << m_targetVid << ":" << m_targetPid << Qt::dec
-                       << "— retrying quietly until it appears.";
+            if (m_matchOther)
+                qWarning() << "[Serial] No non-STM32 serial device detected "
+                              "(AUTO:OTHER) — recycle Arduino not plugged in? "
+                              "Retrying quietly until it appears.";
+            else
+                qWarning() << "[Serial] No device detected for VID:PID"
+                           << Qt::hex << m_targetVid << ":" << m_targetPid << Qt::dec
+                           << "— retrying quietly until it appears.";
             s_warnedNoPort = true;
         }
         m_reconnectTimer->start();
@@ -211,12 +227,31 @@ QString Serial_Connection::findPortByVidPid() const
     // m_targetVid/m_targetPid (STM32 by default, or whatever board start()
     // was given via "AUTO:<vid>:<pid>"). Lets the user move the cable around
     // without hard-coding "COM5" or "/dev/ttyACM0".
+    //
+    // "AUTO:OTHER" mode (m_matchOther): pick the first port that HAS a USB
+    // descriptor and is NOT the STM32. This is how the recycle Arduino is
+    // found — its exact VID:PID is unknown (clones differ), but "the serial
+    // device that isn't the STM32" uniquely identifies it on this Pi, which
+    // only ever has the two boards. Ports with no descriptor (e.g. the Pi's
+    // own GPIO UART /dev/ttyAMA0, or a phantom ttyACM with no enumeration)
+    // are skipped so we never grab a non-board tty by accident.
     for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts()) {
-        if (info.hasVendorIdentifier() && info.hasProductIdentifier()
-            && info.vendorIdentifier()  == m_targetVid
-            && info.productIdentifier() == m_targetPid) {
+        if (!info.hasVendorIdentifier() || !info.hasProductIdentifier())
+            continue;
+        const quint16 vid = info.vendorIdentifier();
+        const quint16 pid = info.productIdentifier();
+
+        if (m_matchOther) {
+            // Skip the STM32; the first remaining USB-CDC board wins.
+            if (vid == STM32_VID && pid == STM32_PID)
+                continue;
+            qInfo() << "[Serial] AUTO:OTHER matched" << info.portName()
+                    << "VID:PID" << Qt::hex << vid << ":" << pid << Qt::dec;
             return info.portName();
         }
+
+        if (vid == m_targetVid && pid == m_targetPid)
+            return info.portName();
     }
     return {};
 }

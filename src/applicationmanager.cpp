@@ -160,25 +160,25 @@ void ApplicationManager::initialize()
                               Q_ARG(int,     115200));
 
     // ── Second serial worker: recycle Arduino (USB-CDC, separate board) ──
-    // The Arduino is a distinct USB-CDC device from the STM32 (Arduino Uno
-    // R3 → VID:PID 2341:0043, confirmed via `udevadm info` on this unit's
-    // hardware). Serial_Connection resolves "AUTO:<vid>:<pid>" the same way
-    // it already resolves bare "AUTO" for the STM32 (see
-    // Serial_Connection::parseAutoSpec/findPortByVidPid), so it doesn't
-    // matter which /dev/ttyACMx number either board lands on, or in what
-    // plug-in order — both auto-detect independently. Override via
-    // QSettings "arduino/port" — e.g. set it to "/dev/serial0" if the
-    // Arduino is instead wired to the Pi's GPIO UART, or to a different
-    // "AUTO:<vid>:<pid>" if the board changes (a CH340-based clone
-    // enumerates as 1A86:7523, not 2341:0043 — check with
-    // `udevadm info -q property -n /dev/ttyACMx`).
+    // The Arduino is a distinct USB-CDC device from the STM32. We identify the
+    // two boards by their USB descriptor so it never matters which /dev/ttyACMx
+    // number either lands on, or in what plug-in order:
+    //   • STM32  → bare "AUTO"  → VID:PID 0483:5740 (fixed, ST Virtual COM Port)
+    //   • Arduino → "AUTO:OTHER" → "the serial port that is NOT the STM32"
+    // "AUTO:OTHER" is used (instead of a fixed Arduino VID:PID) because the
+    // recycle board's ID isn't guaranteed: a genuine Uno R3 is 2341:0043, but
+    // CH340 clones enumerate as 1A86:7523, FTDI as 0403:6001, etc. Since this
+    // Pi only ever has the two boards, "not the STM32" uniquely picks the
+    // Arduino regardless of which board/clone is fitted. Override via QSettings
+    // "arduino/port" with a literal path ("/dev/ttyACM1", "/dev/serial0" for
+    // the GPIO UART) or a specific "AUTO:<vid>:<pid>" if you want to pin it.
     m_arduinoThread = new QThread(this);
     m_arduino       = new Serial_Connection();          // no parent (moveToThread)
     m_arduino->moveToThread(m_arduinoThread);
     connect(m_arduinoThread, &QThread::finished,
             m_arduino,       &QObject::deleteLater);
     m_arduinoThread->start();
-    const QString arduinoPort = QSettings().value("arduino/port", "AUTO:2341:0043").toString();
+    const QString arduinoPort = QSettings().value("arduino/port", "AUTO:OTHER").toString();
     QMetaObject::invokeMethod(m_arduino, "start", Qt::QueuedConnection,
                               Q_ARG(QString, arduinoPort),
                               Q_ARG(int,     115200));
@@ -287,12 +287,27 @@ void ApplicationManager::initialize()
                 m_recycleClassifier, &RecycleClassifier::classify);
         connect(m_recycleClassifier, &RecycleClassifier::verdict,
                 RecycleSession::s_instance, &RecycleSession::onCameraVerdict);
+
+        // Recycle camera light (STM32 relay 1 = pin PA9). ON only while a
+        // recycle session is live, so the camera has even light to classify
+        // by, then OFF the instant the session ends. Driven straight off the
+        // session's active flag — separate from the cabinet/vending LED on
+        // relay 2. (The light hangs off the STM32, not the Arduino, per the
+        // wiring: PA9 → relay → transistor → LED.)
+        connect(RecycleSession::s_instance, &RecycleSession::activeChanged,
+                this, [this]() {
+                    const bool on = RecycleSession::s_instance->active();
+                    sendSerial(QStringLiteral("RELAY:1:%1").arg(on ? 1 : 0), 0);
+                    Logger::info("LED", on ? "Recycle camera light on"
+                                          : "Recycle camera light off");
+                });
     }
 
-    // ── Cabinet LEDs (relays 1+2) ───────────────────────────────────────
+    // ── Vending + bottom LED (relay 2 / STM32 PA10) ─────────────────────
     // Lit whenever someone's using the machine; off after 5 minutes with
-    // no touch. Any activity (IdleManager::touched) relights them and
-    // restarts the countdown.
+    // no touch. Any activity (IdleManager::touched) relights it and
+    // restarts the countdown. (Relay 1 / PA9 is the recycle camera light,
+    // handled by the recycle session above — not part of this idle logic.)
     m_ledTimer = new QTimer(this);
     m_ledTimer->setSingleShot(true);
     m_ledTimer->setInterval(5 * 60 * 1000);          // 5 minutes
@@ -531,21 +546,17 @@ void ApplicationManager::setCabinetLeds(bool on)
 {
     if (m_ledsOn == on) return;
     m_ledsOn = on;
-    // Relay 1 = vending light, Relay 2 = bottom LED (the STM32 switches
-    // them via the 2N2222 driver). Fire-and-forget; no-op if no STM32.
-    // NOTE: colon-joined to match Protocol_Dispatch's ':' split in
-    // protocol.c — every other command in this codebase follows that
-    // convention (DISPENSE:, ANGLE:, SERVO:, etc). A bare "RELAY 1 0"
-    // would be parsed as one unmatched command name ("RELAY 1 0") and
-    // bounce back ERR:unknown, exactly like the DISPENSE/SERVO bugs.
-    // UNVERIFIED: protocol.c as shared doesn't list a RELAY entry in its
-    // dispatch table, so the exact name/arg order below is a best-effort
-    // guess consistent with the rest of the protocol, not a confirmed
-    // match — please check it against whichever source actually owns
-    // relay control on the firmware side.
-    sendSerial(QStringLiteral("RELAY:%1:%2").arg(1).arg(on ? 1 : 0), 0);
+    // Relay 2 (STM32 pin PA10) = the vending light + the bottom cabinet LED,
+    // both on the same relay/2N2222 driver. Lit with any interaction, off
+    // after 5 min idle (see the m_ledTimer wiring in initialize()).
+    //   • Relay 1 (PA9) is NOT touched here — that's the recycle camera light,
+    //     driven on/off by the recycle session instead (see RecycleSession
+    //     activeChanged wiring), so it only burns while an item is being sorted.
+    //   • Relay 3 (PB8) is the always-on vending rail, set once at boot.
+    // Fire-and-forget; no-op if no STM32. Colon-joined to match
+    // Protocol_Dispatch's ':' split in protocol.c (DISPENSE:, ANGLE:, SERVO: …).
     sendSerial(QStringLiteral("RELAY:%1:%2").arg(2).arg(on ? 1 : 0), 0);
-    Logger::info("LED", on ? "Cabinet LEDs on" : "Cabinet LEDs off (idle)");
+    Logger::info("LED", on ? "Vending + bottom LED on" : "Vending + bottom LED off (idle)");
 }
 
 void ApplicationManager::devTriggerAdmin()
