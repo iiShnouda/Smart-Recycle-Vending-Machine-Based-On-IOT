@@ -10,7 +10,9 @@
 #include <QTimer>
 
 /**
- * Serial_Connection — talks to the STM32 over USB-CDC (virtual COM port).
+ * Serial_Connection — talks to a board over USB-CDC (virtual COM port).
+ * Used for both the STM32 (vending) and the recycle Arduino — each gets
+ * its own instance, on its own QThread, with its own target VID:PID.
  *
  * Lives on its own QThread so blocking calls (waitForReadyRead, etc.) NEVER
  * freeze the GUI. Communicates with the rest of the app via signals/slots.
@@ -22,13 +24,13 @@
  *   - Watchdog ping every 5 s; declares the link dead after 3 missed pings.
  *
  * Wire protocol (text, line-based, '\n' terminated):
- *   Pi  → STM32 :  "MOTOR_ON\n"      "STEP:1600:1\n"      "PING\n"
- *   STM32 → Pi  :  "Done\n"          "Error bad_param\n"  "PONG\n"
+ *   Pi  → board :  "MOTOR_ON\n"      "STEP:1600:1\n"      "PING\n"
+ *   board → Pi  :  "Done\n"          "Error bad_param\n"  "PONG\n"
  *
  * Replies that start (case-insensitive) with "Done", "OK" or "PONG"
  * resolve the pending command as success.
  * Replies starting with "Error" resolve it as failure.
- * Anything else (e.g. unsolicited "PLASTIC", "CAN") is forwarded
+ * Anything else (e.g. unsolicited "PLASTIC", "CAN", "EVT,...") is forwarded
  * via replyReceived() but does not consume the pending command.
  */
 class Serial_Connection : public QObject
@@ -38,7 +40,9 @@ public:
     explicit Serial_Connection(QObject *parent = nullptr);
     ~Serial_Connection() override;
 
-    // STM32 USB-CDC default IDs (STMicroelectronics / Virtual COM Port)
+    // STM32 USB-CDC default IDs (STMicroelectronics / Virtual COM Port).
+    // Kept for back-compat with callers that still reference these directly;
+    // start("AUTO", baud) below defaults to this same pair.
     static constexpr quint16 STM32_VID = 0x0483;
     static constexpr quint16 STM32_PID = 0x5740;
 
@@ -49,8 +53,12 @@ public:
 
 public slots:
     /** Open the port and start watchdog / reconnect timers.
-     *  portName: a real port name ("COM5", "/dev/ttyACM0") or "AUTO" to
-     *  auto-detect by USB VID:PID. */
+     *  portName: a real port name ("COM5", "/dev/ttyACM0"), "AUTO" to
+     *  auto-detect the STM32 by its default VID:PID (0483:5740), or
+     *  "AUTO:<vid>:<pid>" (4-digit hex, e.g. "AUTO:2341:0043") to
+     *  auto-detect a different USB-CDC device by its own VID:PID — used
+     *  for the recycle Arduino, which is a separate physical board with
+     *  its own descriptor. */
     void start(const QString &portName, int baud);
 
     /** Stop everything (timers + port). Queued commands are dropped. */
@@ -80,6 +88,13 @@ private:
     void openPort();
     void closePort();
     QString findPortByVidPid() const;
+    /** Parses "AUTO:<vid>:<pid>" (hex) out of m_portName into m_targetVid/
+     *  m_targetPid. Called once from start(); leaves m_targetVid/Pid at
+     *  the STM32 defaults if portName is bare "AUTO" or isn't an
+     *  "AUTO:..." spec at all (i.e. a literal device path). Returns false
+     *  on a malformed "AUTO:..." spec (logs a warning, falls back to the
+     *  STM32 defaults rather than refusing to start). */
+    bool parseAutoSpec(const QString &portName);
     void writeRaw(const QByteArray &bytes);
     void sendNextFromQueue();
     void teardownAfterFailure();
@@ -91,7 +106,14 @@ private:
     int          m_baud      = 115200;
     bool         m_isStarted = false;    // stop()/start() flag
 
-    // One command in-flight at a time (waiting for STM32 reply)
+    // Which VID:PID findPortByVidPid() scans for when m_portName is an
+    // "AUTO" spec. Defaults to the STM32's IDs; overridden by parseAutoSpec()
+    // when m_portName is "AUTO:<vid>:<pid>" — e.g. the recycle Arduino
+    // (2341:0043 for a genuine Uno R3; differs for clones — see ApplicationManager).
+    quint16 m_targetVid = STM32_VID;
+    quint16 m_targetPid = STM32_PID;
+
+    // One command in-flight at a time (waiting for the board's reply)
     struct PendingCommand {
         QString command;
         int     attempts  = 0;

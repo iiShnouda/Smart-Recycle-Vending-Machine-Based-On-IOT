@@ -159,18 +159,26 @@ void ApplicationManager::initialize()
                               Q_ARG(QString, "AUTO"),
                               Q_ARG(int,     115200));
 
-    // ── Second serial worker: recycle Arduino on the Pi's GPIO UART ──────
-    // The STM32 owns the only USB port, so the recycle Arduino is wired to the
-    // Pi's hardware UART (GPIO14 TXD / GPIO15 RXD → /dev/serial0). Same
-    // Serial_Connection class, but a FIXED device path (no USB VID:PID to
-    // auto-detect). Override the port via QSettings "arduino/port".
+    // ── Second serial worker: recycle Arduino (USB-CDC, separate board) ──
+    // The Arduino is a distinct USB-CDC device from the STM32 (Arduino Uno
+    // R3 → VID:PID 2341:0043, confirmed via `udevadm info` on this unit's
+    // hardware). Serial_Connection resolves "AUTO:<vid>:<pid>" the same way
+    // it already resolves bare "AUTO" for the STM32 (see
+    // Serial_Connection::parseAutoSpec/findPortByVidPid), so it doesn't
+    // matter which /dev/ttyACMx number either board lands on, or in what
+    // plug-in order — both auto-detect independently. Override via
+    // QSettings "arduino/port" — e.g. set it to "/dev/serial0" if the
+    // Arduino is instead wired to the Pi's GPIO UART, or to a different
+    // "AUTO:<vid>:<pid>" if the board changes (a CH340-based clone
+    // enumerates as 1A86:7523, not 2341:0043 — check with
+    // `udevadm info -q property -n /dev/ttyACMx`).
     m_arduinoThread = new QThread(this);
     m_arduino       = new Serial_Connection();          // no parent (moveToThread)
     m_arduino->moveToThread(m_arduinoThread);
     connect(m_arduinoThread, &QThread::finished,
             m_arduino,       &QObject::deleteLater);
     m_arduinoThread->start();
-    const QString arduinoPort = QSettings().value("arduino/port", "/dev/serial0").toString();
+    const QString arduinoPort = QSettings().value("arduino/port", "AUTO:2341:0043").toString();
     QMetaObject::invokeMethod(m_arduino, "start", Qt::QueuedConnection,
                               Q_ARG(QString, arduinoPort),
                               Q_ARG(int,     115200));
@@ -259,8 +267,8 @@ void ApplicationManager::initialize()
     // lines and sends RECYCLE/VERDICT/BASKETS back out over serial.
     new RecycleSession(this);
     if (RecycleSession::s_instance) {
-        // Recycle runs on the ARDUINO (Pi GPIO UART), not the STM32. Feed its
-        // EVT,* lines in, and route RECYCLE/VERDICT/BASKETS back out to it.
+        // Recycle runs on the ARDUINO, not the STM32. Feed its EVT,* lines
+        // in, and route RECYCLE/VERDICT/BASKETS back out to it.
         connect(m_arduino, &Serial_Connection::replyReceived,
                 RecycleSession::s_instance, &RecycleSession::onSerialLine);
         connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
@@ -509,8 +517,9 @@ void ApplicationManager::sendSerial(const QString &command, int timeoutMs)
 
 void ApplicationManager::sendArduino(const QString &command, int timeoutMs)
 {
-    // Recycle Arduino on the Pi GPIO UART. Used by the recycle flow and the
-    // diagnostics conveyor/IR tests (those moved off the STM32).
+    // Recycle Arduino (USB-CDC, auto-detected by VID:PID). Used by the
+    // recycle flow and the diagnostics conveyor/IR tests (those moved off
+    // the STM32).
     if (!m_arduino) return;
     if (timeoutMs <= 0) timeoutMs = Serial_Connection::kDefaultAckMs;
     QMetaObject::invokeMethod(m_arduino, "sendCommand", Qt::QueuedConnection,

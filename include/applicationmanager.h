@@ -26,7 +26,7 @@ class RecycleClassifier;
  *   - TranslationManager    (UI language switching)
  *   - Serial_Connection     (lives on its own QThread; talks to STM32)
  *   - Serial_Connection     (second worker, on its own QThread; talks to the
- *                            recycle Arduino over the Pi's GPIO UART)
+ *                            recycle Arduino, auto-detected by USB VID:PID)
  *
  * Bridges QML calls to the serial workers via QMetaObject::invokeMethod
  * (queued connection) so the GUI never blocks.
@@ -64,10 +64,11 @@ public:
     QString kioskId()    const { return m_kioskId; }
     QString kioskName()  const { return m_kioskName; }
 
-    /** True once the recycle Arduino (conveyor + 5 IR sensors, on the Pi's
-     *  GPIO UART) has completed its serial handshake. Drives the
-     *  connection-status chip on the diagnostics page. Independent of the
-     *  STM32 link (presence()/serialConnected above is STM32-only). */
+    /** True once the recycle Arduino (conveyor + 5 IR sensors, USB-CDC,
+     *  auto-detected by VID:PID) has completed its serial handshake.
+     *  Drives the connection-status chip on the diagnostics page.
+     *  Independent of the STM32 link (presence()/serialConnected above
+     *  is STM32-only). */
     bool arduinoConnected() const { return m_arduinoConnected; }
 
 public slots:
@@ -84,8 +85,8 @@ public slots:
     Q_INVOKABLE void sendSerial(const QString &command, int timeoutMs = -1);
 
     /** Send a command to the recycle Arduino (conveyor + 5 IR sensors),
-     *  wired to the Pi's GPIO UART (/dev/serial0) — separate from the
-     *  STM32, which owns the USB-CDC link.
+     *  a separate USB-CDC device from the STM32, auto-detected by its own
+     *  USB VID:PID.
      *  Omit timeoutMs (or pass 0/-1) to use the default 500 ms ACK window.
      *  Mirrors sendSerial() but targets the second worker thread. */
     Q_INVOKABLE void sendArduino(const QString &command, int timeoutMs = -1);
@@ -176,8 +177,10 @@ private:
     QThread           *m_serialThread = nullptr;
     Serial_Connection *m_serial       = nullptr;
 
-    // Second serial worker for the recycle Arduino, on the Pi's GPIO UART
-    // (/dev/serial0) — the STM32 already owns the only USB port.
+    // Second serial worker for the recycle Arduino. Also USB-CDC, but a
+    // separate physical board — auto-detected by its own VID:PID via
+    // Serial_Connection's "AUTO:<vid>:<pid>" support, independent of the
+    // STM32's port.
     QThread           *m_arduinoThread = nullptr;
     Serial_Connection *m_arduino       = nullptr;
     bool               m_arduinoConnected = false;

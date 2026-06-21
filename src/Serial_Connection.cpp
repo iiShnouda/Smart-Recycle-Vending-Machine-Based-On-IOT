@@ -25,6 +25,11 @@ void Serial_Connection::start(const QString &portName, int baud)
     m_portName  = portName;
     m_baud      = (baud > 0) ? baud : 115200;
 
+    // Resolve which VID:PID to scan for if this is an AUTO spec. Leaves
+    // m_targetVid/Pid at the STM32 defaults for bare "AUTO" or a literal
+    // device path (parseAutoSpec only overrides them for "AUTO:<vid>:<pid>").
+    parseAutoSpec(m_portName);
+
     // Lazily create the three timers (only on first start). All three live on
     // this object → they run on the worker thread's event loop, not the GUI's.
     if (!m_ackTimer) {
@@ -74,11 +79,45 @@ void Serial_Connection::sendCommand(const QString &command, int timeoutMs)
 
 // ─── Connection management ─────────────────────────────────────────────────
 
+bool Serial_Connection::parseAutoSpec(const QString &portName)
+{
+    // Bare "AUTO" (or a literal path, or empty) → keep current m_targetVid/Pid
+    // (which start out as the STM32 defaults from the in-class initializer,
+    // and otherwise just retain whatever was set on a previous start() call).
+    if (!portName.startsWith("AUTO:", Qt::CaseInsensitive))
+        return true;
+
+    const QStringList parts = portName.split(':');
+    if (parts.size() != 3) {
+        qWarning() << "[Serial] Malformed AUTO spec" << portName
+                   << "— expected AUTO:<VID>:<PID> in hex (e.g. AUTO:2341:0043)."
+                      " Falling back to STM32 defaults" << STM32_VID << STM32_PID;
+        m_targetVid = STM32_VID;
+        m_targetPid = STM32_PID;
+        return false;
+    }
+
+    bool vidOk = false, pidOk = false;
+    const quint16 vid = parts.at(1).toUShort(&vidOk, 16);
+    const quint16 pid = parts.at(2).toUShort(&pidOk, 16);
+    if (!vidOk || !pidOk) {
+        qWarning() << "[Serial] Could not parse hex VID:PID from" << portName
+                   << "— falling back to STM32 defaults" << STM32_VID << STM32_PID;
+        m_targetVid = STM32_VID;
+        m_targetPid = STM32_PID;
+        return false;
+    }
+
+    m_targetVid = vid;
+    m_targetPid = pid;
+    return true;
+}
+
 void Serial_Connection::openPort()
 {
     if (m_serial && m_serial->isOpen()) return;
 
-    // Logged-once guard: a missing STM32 used to print the "retrying" line
+    // Logged-once guard: a missing board used to print the "retrying" line
     // every reconnect tick and flood the log. Now it's said once, then reset
     // when we actually connect.
     static bool s_warnedNoPort = false;
@@ -92,15 +131,19 @@ void Serial_Connection::openPort()
                 this,     &Serial_Connection::onSerialError);
     }
 
-    // Resolve which port to open: explicit name, or auto-detect by VID:PID.
+    // Resolve which port to open: explicit name, or auto-detect by VID:PID
+    // (m_targetVid/Pid — set in start()/parseAutoSpec(), defaults to the
+    // STM32's IDs for bare "AUTO").
     QString port = m_portName;
-    if (port.isEmpty() || port == "AUTO") {
+    if (port.isEmpty() || port == "AUTO" || port.startsWith("AUTO:", Qt::CaseInsensitive)) {
         port = findPortByVidPid();
     }
 
     if (port.isEmpty()) {
         if (!s_warnedNoPort) {
-            qWarning() << "[Serial] No STM32 detected — retrying quietly until it appears.";
+            qWarning() << "[Serial] No device detected for VID:PID"
+                       << Qt::hex << m_targetVid << ":" << m_targetPid << Qt::dec
+                       << "— retrying quietly until it appears.";
             s_warnedNoPort = true;
         }
         m_reconnectTimer->start();
@@ -165,12 +208,13 @@ void Serial_Connection::teardownAfterFailure()
 QString Serial_Connection::findPortByVidPid() const
 {
     // Walk all available ports and pick the one whose USB descriptor matches
-    // an STM32 USB-CDC device. Lets the user move the cable around without
-    // hard-coding "COM5" or "/dev/ttyACM0".
+    // m_targetVid/m_targetPid (STM32 by default, or whatever board start()
+    // was given via "AUTO:<vid>:<pid>"). Lets the user move the cable around
+    // without hard-coding "COM5" or "/dev/ttyACM0".
     for (const QSerialPortInfo &info : QSerialPortInfo::availablePorts()) {
         if (info.hasVendorIdentifier() && info.hasProductIdentifier()
-            && info.vendorIdentifier()  == STM32_VID
-            && info.productIdentifier() == STM32_PID) {
+            && info.vendorIdentifier()  == m_targetVid
+            && info.productIdentifier() == m_targetPid) {
             return info.portName();
         }
     }
@@ -203,7 +247,7 @@ void Serial_Connection::writeRaw(const QByteArray &bytes)
     const qint64 n = m_serial->write(bytes);
     if (n != bytes.size()) {
         qWarning() << "[Serial] Short write:" << n << "of" << bytes.size()
-                   << m_serial->errorString();
+        << m_serial->errorString();
     }
     m_serial->flush();         // push to OS now (don't wait for event loop)
 }
@@ -225,15 +269,15 @@ void Serial_Connection::onReadyRead()
         const QString reply = QString::fromUtf8(line);
         qDebug() << "[Serial] RX:" << reply;
 
-        // Any traffic from the STM32 means the link is healthy → reset
+        // Any traffic from the board means the link is healthy → reset
         // the missed-ping counter so the watchdog won't trigger.
         m_pingsMissed = 0;
 
         // Try to resolve the in-flight command if this looks like an ACK.
         if (!m_pending.command.isEmpty()) {
             const bool ok  = reply.startsWith("Done", Qt::CaseInsensitive)
-                          || reply.startsWith("OK",   Qt::CaseInsensitive)
-                          || reply.startsWith("PONG", Qt::CaseInsensitive);
+            || reply.startsWith("OK",   Qt::CaseInsensitive)
+                || reply.startsWith("PONG", Qt::CaseInsensitive);
             const bool err = reply.startsWith("Error", Qt::CaseInsensitive);
 
             if (ok || err) {
@@ -292,7 +336,7 @@ void Serial_Connection::onWatchdogTick()
     }
 
     m_pingsMissed++;
-    // Queue PING with the default (fast) timeout. Any reply from the STM32
+    // Queue PING with the default (fast) timeout. Any reply from the board
     // resets m_pingsMissed in onReadyRead(), so even unsolicited traffic
     // proves the link is alive.
     m_outQueue.enqueue({QStringLiteral("PING"), kDefaultAckMs});
