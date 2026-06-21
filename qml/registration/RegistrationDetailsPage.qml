@@ -3,12 +3,11 @@ import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
 
 /*
- * RegistrationDetailsPage — collects the new user's name + mobile number
- * AFTER the face capture (name-after-face). The face is already enrolled with
- * a placeholder name; here we write the real name/mobile onto that DB row via
- * FaceRec.finalizeUser(userId, …) so login greets the real person
- * ("Welcome <name>") and the mobile keys the temp account the phone app claims.
- * Uses the on-screen virtual keyboard.
+ * RegistrationDetailsPage — MOBILE FIRST. Collects the phone number and verifies
+ * it belongs to an EXISTING registered ReWinGo app account (via
+ * MachineLink.verifyMobile → backend `users` lookup) BEFORE the face is scanned.
+ * Only a verified number proceeds to FaceEnrollPage; an unregistered number is
+ * rejected here. Uses the on-screen virtual keyboard.
  */
 Rectangle {
     id: page
@@ -16,10 +15,7 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
-    // The user_id returned by the just-completed face enrollment.
-    property string newUserId: ""
-    // Held while we wait for finalizeUser to write the row.
-    property string pendingName: ""
+    // The number we're verifying (carried to the face page on success).
     property string pendingMobile: ""
 
     property int langTick: 0
@@ -28,32 +24,42 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // finalizeUser always answers (finalized on success, failed on error). In
-    // either case the face is already enrolled, so we continue to the success
-    // page — at worst the stored name stays the placeholder.
+    // Backend's answer to verifyMobile(). Proceed to the face scan ONLY if the
+    // number is already a registered app account.
     Connections {
-        target: FaceRec
-        function onFinalized(userId) { page.goComplete() }
-        function onFailed(reason)    { page.goComplete() }
+        target: MachineLink
+        function onMobileVerified(phone, exists) {
+            if (phone !== page.pendingMobile) return        // stale answer
+            verifyTimeout.stop()
+            saving.running = false
+            if (exists) {
+                stackView.replace(
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml",
+                    { pendingMobile: page.pendingMobile })
+            } else {
+                err.text = qsTr("This number isn't registered in the ReWinGo app. Create an account in the app first.")
+            }
+        }
     }
 
-    function goComplete() {
-        stackView.replace(
-            "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
-            { userId: page.newUserId, userName: page.pendingName,
-              userMobile: page.pendingMobile })
+    // Don't hang if the backend never answers (e.g. offline).
+    Timer {
+        id: verifyTimeout
+        interval: 8000; repeat: false
+        onTriggered: {
+            saving.running = false
+            err.text = qsTr("Couldn't reach the server. Check the connection and try again.")
+        }
     }
 
     function proceed() {
-        // Mobile-only registration — the phone number IS the account key (the
-        // real name comes from the ReWinGo app when the account is claimed).
         const mob = mobileField.text.trim()
-        if (mob.length < 6)  { err.text = qsTr("Please enter a valid mobile number"); return }
-        page.pendingName = mob        // identify the row by mobile until the app claims it
+        if (mob.length < 6) { err.text = qsTr("Please enter a valid mobile number"); return }
         page.pendingMobile = mob
         err.text = ""
         saving.running = true
-        FaceRec.finalizeUser(parseInt(page.newUserId), mob, mob)
+        verifyTimeout.restart()
+        MachineLink.verifyMobile(mob)        // → onMobileVerified
     }
 
     // Back
@@ -74,13 +80,14 @@ Rectangle {
         spacing: 22
 
         Text {
-            text: { langTick; return qsTr("Create your account") }
+            text: { langTick; return qsTr("Link your account") }
             color: "#1F2A1B"; font.pixelSize: 52; font.weight: Font.Black
             anchors.horizontalCenter: parent.horizontalCenter
         }
         Text {
-            text: { langTick; return qsTr("Your face is saved — enter your mobile number to finish") }
-            color: "#5A6B52"; font.pixelSize: 22
+            text: { langTick; return qsTr("Enter your ReWinGo app mobile number — we'll check it, then scan your face") }
+            color: "#5A6B52"; font.pixelSize: 22; width: parent.width
+            horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             anchors.horizontalCenter: parent.horizontalCenter
         }
 

@@ -44,6 +44,8 @@ void MachineLink::configure(const QString &machineId)
                 [this](const QString &topic, const QString &payload) {
             if (topic.endsWith(QStringLiteral("/login")))
                 handleLogin(payload);
+            else if (topic.endsWith(QStringLiteral("/verify_result")))
+                handleVerifyResult(payload);
         });
         connect(mq, &MqttClient::connectionChanged, this,
                 [this](bool ok) { setConnected(ok); });
@@ -109,6 +111,36 @@ void MachineLink::beginClaim(const QString &name, const QString &phone)
     // screen are never shown at the same time, so sharing the path is fine.
     renderQr(QStringLiteral("REWINGO-CLAIM:") + m_claimToken);
     emit claimChanged();
+}
+
+void MachineLink::verifyMobile(const QString &phone)
+{
+    if (!m_configured) {
+        QSettings s;
+        configure(s.value(QStringLiteral("kiosk/id")).toString());
+    }
+    MqttClient *mq = MqttClient::s_instance;
+    if (!mq || !mq->isConnected()) {
+        // Offline → can't confirm the account exists. Fail closed (treat as not
+        // verified) so we never enrol a face against an unverifiable number.
+        Logger::warn("MachineLink", "verifyMobile: MQTT offline — cannot verify");
+        emit mobileVerified(phone, false);
+        return;
+    }
+    QJsonObject o;
+    o.insert(QStringLiteral("phone"), phone);
+    mq->publishJson(QStringLiteral("verify"), o, /*qos*/ 1, /*retain*/ false);
+    Logger::audit("MachineLink", "mobile verify requested", { {"phone", phone} });
+}
+
+void MachineLink::handleVerifyResult(const QString &payload)
+{
+    const QJsonObject o = QJsonDocument::fromJson(payload.toUtf8()).object();
+    const QString phone = o.value(QStringLiteral("phone")).toString();
+    const bool exists   = o.value(QStringLiteral("exists")).toBool(false);
+    Logger::audit("MachineLink", "mobile verify result",
+                  { {"phone", phone}, {"exists", exists} });
+    emit mobileVerified(phone, exists);
 }
 
 void MachineLink::cancel()

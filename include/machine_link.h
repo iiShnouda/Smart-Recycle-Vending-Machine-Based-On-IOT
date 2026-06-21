@@ -55,6 +55,13 @@ public slots:
      *  to scan and auto-link. Not required to finish registration. */
     Q_INVOKABLE void beginClaim(const QString &name, const QString &phone);
 
+    /** Ask the backend whether <phone> is already a registered app account
+     *  (a doc in the shared MongoDB `users` collection). Publishes to
+     *  rewingo/<machineId>/verify; the backend answers on /verify_result and
+     *  we emit mobileVerified(phone, exists). Used to gate face registration:
+     *  only a number that already has an app account may enroll a face. */
+    Q_INVOKABLE void verifyMobile(const QString &phone);
+
 signals:
     void connectedChanged();
     void sessionChanged();
@@ -62,12 +69,16 @@ signals:
     void claimChanged();
     /** The backend relayed the user the phone scanned us with. */
     void loginReceived(const QString &userId, const QString &name, int points);
+    /** Backend's answer to verifyMobile(): exists == true if a registered
+     *  account uses that number. */
+    void mobileVerified(const QString &phone, bool exists);
 
 private:
     void setState(const QString &s);
     void setConnected(bool c);
     void renderQr(const QString &payload);
     void handleLogin(const QString &payload);
+    void handleVerifyResult(const QString &payload);
 
     QString m_machineId;
     QString m_token;            // per-session, single-use (Discord-style)

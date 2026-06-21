@@ -165,9 +165,11 @@ Rectangle {
             width: 260; height: 90; radius: 45
             color: "#1A1D1A"
             TapHandler {
-                // Name-after-face: scan the face first, then collect name/mobile.
+                // Mobile-first: collect + verify the phone number against the
+                // app's registered accounts BEFORE scanning the face. Only a
+                // number that already has an app account proceeds to enrol.
                 onTapped: stackView.replace(
-                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/FaceEnrollPage.qml")
+                    "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationDetailsPage.qml")
             }
             Row {
                 anchors.centerIn: parent; spacing: 10

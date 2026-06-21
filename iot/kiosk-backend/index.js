@@ -70,6 +70,7 @@ mq.on('connect', () => {
     'rewingo/+/fault',
     'rewingo/+/inventory',
     'rewingo/+/register',     // a kiosk created a pending account to be claimed
+    'rewingo/+/verify',       // a kiosk asks if a mobile is a registered account
   ], err => err && console.error('[mqtt] subscribe error', err.message));
 });
 mq.on('error',     e => console.error('[mqtt] error:', e.message));
@@ -152,6 +153,21 @@ mq.on('message', async (topic, buf) => {
         { $set: { token: body.token, name: body.name || '', phone: body.phone || '',
                   machineId, points: 0, claimed: false, ts } },
         { upsert: true });
+    else if (kind === 'verify') {
+      // The kiosk asks: is this mobile already a registered app account?
+      // Look it up in the shared `users` collection (the phone app writes
+      // `mobile` there on signup) and answer on /verify_result. Used to gate
+      // face registration to numbers that already have an app account.
+      const phone = String(body.phone || '').trim();
+      let exists = false;
+      if (phone) {
+        const u = await db.collection('users').findOne({ mobile: phone });
+        exists = !!u;
+      }
+      mq.publish(`rewingo/${machineId}/verify_result`,
+                 JSON.stringify({ phone, exists }), { qos: 1 });
+      console.log(`[verify] ${machineId} ${phone} -> ${exists}`);
+    }
   } catch (e) {
     console.error('[mongo] write failed:', e.message);
   }

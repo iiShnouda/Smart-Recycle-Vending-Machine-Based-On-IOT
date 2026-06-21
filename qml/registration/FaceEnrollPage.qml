@@ -19,6 +19,11 @@ Rectangle {
     color: "#F2F4ED"
     property StackView stackView: StackView.view
 
+    // The verified mobile number, passed in from RegistrationDetailsPage. The
+    // face is enrolled here, then linked to this number.
+    property string pendingMobile: ""
+    property string enrolledUserId: ""
+
     property int langTick: 0
     property int previewTick: 0
     Connections {
@@ -26,22 +31,33 @@ Rectangle {
         function onLanguageChanged() { langTick++ }
     }
 
-    // Name-after-face: capture the face FIRST with a placeholder name. The
-    // enroller stores the embedding and returns the new user_id; we then go
-    // collect the real name/mobile and write them onto that row (finalizeUser).
+    // Mobile-first: the number was already entered + verified on the previous
+    // page. Capture the face here, then write the verified mobile onto the new
+    // user row (finalizeUser) and finish.
     Component.onCompleted: FaceRec.enroll("")
     Component.onDestruction: FaceRec.cancel()
     StackView.onDeactivated:  FaceRec.cancel()
 
+    function goComplete() {
+        stackView.replace(
+            "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationCompletePage.qml",
+            { userId: page.enrolledUserId,
+              userName: page.pendingMobile, userMobile: page.pendingMobile })
+    }
+
     Connections {
         target: FaceRec
         function onEnrolled(name, userId) {
-            stackView.replace(
-                "qrc:/Recycle_Vending_Machine_LCD/qml/registration/RegistrationDetailsPage.qml",
-                { newUserId: "" + userId })
+            // Face captured → link the verified mobile to this new user, then go.
+            page.enrolledUserId = "" + userId
+            FaceRec.finalizeUser(userId, page.pendingMobile, page.pendingMobile)
         }
+        function onFinalized(userId) { page.goComplete() }
         function onFailed(reason) {
-            errorBanner.text = qsTr("Couldn't register: ") + reason
+            // finalize failed but the face IS enrolled → still finish; only an
+            // enroll failure (before we got a userId) is a hard error.
+            if (page.enrolledUserId.length > 0) page.goComplete()
+            else errorBanner.text = qsTr("Couldn't register: ") + reason
         }
         function onEnrollProgressChanged() { arc.requestPaint() }
     }
