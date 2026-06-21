@@ -43,6 +43,20 @@ Rectangle {
         SequentialAnimation { id: rejectFlash; NumberAnimation { target: rejectOverlay; property: "opacity"; to: 0.22; duration: 120 }
                               NumberAnimation { target: rejectOverlay; property: "opacity"; to: 0.0; duration: 480 } } }
 
+    // ── Camera test (debug) ──
+    // Opens the live cv2 detection window on the Pi's screen so you can SEE
+    // what the camera classifies (bottle / can / reject + confidence). Use it
+    // when idle — it grabs the CSI camera. Press Q in that window to close it.
+    Rectangle {
+        anchors.top: parent.top; anchors.right: parent.right
+        anchors.topMargin: 30; anchors.rightMargin: 30
+        width: 168; height: 58; radius: 29
+        color: "#1F2A1B"; z: 50
+        BounceOnPress { onTapped: { Idle.touch(); RecycleSession.openCameraTest() } }
+        Text { anchors.centerIn: parent; text: qsTr("📷 Test camera")
+               color: "#FFFFFF"; font.pixelSize: 16; font.weight: Font.ExtraBold }
+    }
+
     // ── Header ──
     Text {
         id: title

@@ -4,6 +4,9 @@
 #include <QSettings>
 #include <QTimer>
 #include <QStringList>
+#include <QDir>
+#include <QFile>
+#include <QProcess>
 
 RecycleSession *RecycleSession::s_instance = nullptr;
 
@@ -33,16 +36,6 @@ RecycleSession::RecycleSession(QObject *parent) : QObject(parent)
         servo(QStringLiteral("NEUTRAL"));
         m_phase = PhIdle;
         setLast(tr("Timed out — try again"));
-        maybeFinish();
-    });
-
-    // Reject eject: reverse the belt for a moment to spit the item back out.
-    m_ejectTimer = new QTimer(this);
-    m_ejectTimer->setSingleShot(true);
-    connect(m_ejectTimer, &QTimer::timeout, this, [this]() {
-        beltStop();
-        servo(QStringLiteral("NEUTRAL"));
-        m_phase = PhIdle;
         maybeFinish();
     });
 }
@@ -88,7 +81,6 @@ void RecycleSession::endSession()
     beltStop();
     servo(QStringLiteral("NEUTRAL"));
     m_phaseTimer->stop();
-    m_ejectTimer->stop();
     m_phase = PhIdle;
     if (m_active) {
         m_active = false;
@@ -130,7 +122,7 @@ void RecycleSession::onCameraVerdict(const QString &cls)
             ++m_rejected; emit countsChanged();
             emit itemRejected(tr("Bottle basket is full"));
             setLast(tr("Rejected — bottle basket full"));
-            beltRev(); m_phase = PhEjecting; m_ejectTimer->start(kEjectMs);
+            beltRev(); m_phase = PhEjecting; armPhaseTimeout(kPhaseTimeoutMs);
             return;
         }
         m_pendingLargeBottle = c.contains("large");
@@ -142,7 +134,7 @@ void RecycleSession::onCameraVerdict(const QString &cls)
             ++m_rejected; emit countsChanged();
             emit itemRejected(tr("Can basket is full"));
             setLast(tr("Rejected — can basket full"));
-            beltRev(); m_phase = PhEjecting; m_ejectTimer->start(kEjectMs);
+            beltRev(); m_phase = PhEjecting; armPhaseTimeout(kPhaseTimeoutMs);
             return;
         }
         setLast(tr("Can — sorting…"));
@@ -154,7 +146,7 @@ void RecycleSession::onCameraVerdict(const QString &cls)
         m_pendingLargeBottle = false;
         emit itemRejected(tr("Not an empty bottle or can"));
         setLast(tr("Rejected — not recyclable"));
-        beltRev(); m_phase = PhEjecting; m_ejectTimer->start(kEjectMs);
+        beltRev(); m_phase = PhEjecting; armPhaseTimeout(kPhaseTimeoutMs);
     }
 }
 
@@ -198,8 +190,17 @@ void RecycleSession::onIrEdge(int sensor, bool blocked)
             armPhaseTimeout(kPhaseTimeoutMs);
         }
         break;
-    case 2:                        // mid-lane — just passing through
-        if (m_phase == PhMoving) setLast(tr("Moving to the scanner…"));
+    case 2:                        // mid-lane
+        if (m_phase == PhMoving) {
+            setLast(tr("Moving to the scanner…"));
+        } else if (m_phase == PhEjecting) {
+            // A rejected item, driven back in reverse, has reached IR2 → stop.
+            beltStop();
+            servo(QStringLiteral("NEUTRAL"));
+            m_phase = PhIdle;
+            setLast(tr("Rejected — please take it back"));
+            maybeFinish();
+        }
         break;
     case 3:                        // camera/stop position
         if (m_phase == PhMoving) {
@@ -302,4 +303,30 @@ void RecycleSession::emptyPlasticBin()
     QSettings().setValue("recycle/plasticBinCount", 0);
     emit binChanged();
     Logger::audit("Recycle", "Plastic bin emptied");
+}
+
+void RecycleSession::resetBins()
+{
+    m_aluBin = 0;
+    m_plasticBin = 0;
+    QSettings s;
+    s.setValue("recycle/aluBinCount", 0);
+    s.setValue("recycle/plasticBinCount", 0);
+    emit binChanged();
+    Logger::audit("Recycle", "Both bins reset (can + bottle)");
+}
+
+void RecycleSession::openCameraTest()
+{
+    // Launch the live cv2 detection window (recycle_test.py) on the Pi's display,
+    // detached, so an operator can SEE what the camera classifies. Uses the same
+    // recycle_venv as the headless classifier. Close it with Q.
+    const QString home   = QDir::homePath();
+    const QString venvPy = home + "/recycle_venv/bin/python";
+    const QString python = QFile::exists(venvPy) ? venvPy : QStringLiteral("python3");
+    const QString script = home + "/recycle_test.py";
+    const bool ok = QProcess::startDetached(python, { script });
+    Logger::audit("Recycle", ok ? "Camera test window launched"
+                                : "Camera test launch FAILED",
+                  { {"python", python}, {"script", script} });
 }
