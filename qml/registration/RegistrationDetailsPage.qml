@@ -45,15 +45,15 @@ Rectangle {
     }
 
     function proceed() {
-        const nm = nameField.text.trim()
-        if (nm.length === 0) { err.text = qsTr("Please enter your name"); return }
+        // Mobile-only registration — the phone number IS the account key (the
+        // real name comes from the ReWinGo app when the account is claimed).
         const mob = mobileField.text.trim()
         if (mob.length < 6)  { err.text = qsTr("Please enter a valid mobile number"); return }
-        page.pendingName = nm
+        page.pendingName = mob        // identify the row by mobile until the app claims it
         page.pendingMobile = mob
         err.text = ""
         saving.running = true
-        FaceRec.finalizeUser(parseInt(page.newUserId), nm, mob)
+        FaceRec.finalizeUser(parseInt(page.newUserId), mob, mob)
     }
 
     // Back
@@ -79,33 +79,9 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
         }
         Text {
-            text: { langTick; return qsTr("Your face is saved — now tell us who you are") }
+            text: { langTick; return qsTr("Your face is saved — enter your mobile number to finish") }
             color: "#5A6B52"; font.pixelSize: 22
             anchors.horizontalCenter: parent.horizontalCenter
-        }
-
-        // Name
-        Column {
-            width: parent.width; spacing: 8
-            Text { text: { langTick; return qsTr("Name") }
-                   color: "#1F2A1B"; font.pixelSize: 22; font.weight: Font.DemiBold }
-            Rectangle {
-                width: parent.width; height: 92; radius: 18
-                color: "#FFFFFF"; border.width: 2
-                border.color: nameField.activeFocus ? "#0891B2" : "#D8E0CF"
-                TextField {
-                    id: nameField
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    font.pixelSize: 30
-                    verticalAlignment: TextInput.AlignVCenter
-                    leftPadding: 18
-                    placeholderText: qsTr("Your name")
-                    background: Item {}
-                    inputMethodHints: Qt.ImhNoPredictiveText
-                    onAccepted: mobileField.forceActiveFocus()
-                }
-            }
         }
 
         // Mobile number

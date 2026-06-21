@@ -45,13 +45,19 @@ Rectangle {
         }
     }
 
-    // Back
+    // Back — return all the way to the home/main screen (not one step back to
+    // the "choose how to continue" page). Cancels the pending QR session too.
     Rectangle {
         anchors.top: parent.top; anchors.left: parent.left
         anchors.topMargin: 30; anchors.leftMargin: 30
         width: 90; height: 90; radius: 45; z: 10
         color: "#FFFFFF"; border.width: 2; border.color: "#D8E0CF"
-        TapHandler { onTapped: stackView.pop() }
+        TapHandler {
+            onTapped: {
+                MachineLink.cancel()
+                if (stackView) while (stackView.depth > 1) stackView.pop()
+            }
+        }
         Text { anchors.centerIn: parent; text: "←"; font.pixelSize: 36; color: "#1F2A1B" }
     }
 
