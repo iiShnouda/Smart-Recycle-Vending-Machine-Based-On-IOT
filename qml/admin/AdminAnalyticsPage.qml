@@ -8,7 +8,10 @@ Rectangle {
     property StackView stackView: StackView.view
 
     Component.onCompleted: { Analytics.refresh(); Idle.disable() }
-    StackView.onActivated: Idle.disable()
+    StackView.onActivated: { Idle.disable(); Analytics.refresh() }
+
+    // Auto-refresh while the page is open — no need to tap the ↻ button.
+    Timer { interval: 8000; repeat: true; running: true; onTriggered: Analytics.refresh() }
 
     // ════════════ HEADER ════════════
     Rectangle {

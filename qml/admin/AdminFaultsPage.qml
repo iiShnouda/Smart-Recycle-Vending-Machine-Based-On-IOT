@@ -49,6 +49,9 @@ Rectangle {
     Component.onCompleted: { Idle.disable(); refresh() }
     StackView.onActivated: { Idle.disable(); refresh() }
 
+    // Auto-refresh while the page is open — no need to tap Refresh.
+    Timer { interval: 4000; repeat: true; running: true; onTriggered: page.refresh() }
+
     // ============ Top bar ============
     Rectangle {
         id: topBar

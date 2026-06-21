@@ -6,22 +6,30 @@
 #include <QString>
 
 /*
- * RecycleSession — the live tally for one recycle session.
+ * RecycleSession — owns the live recycle sequence AND the running tally.
  *
- * Driven by the STM32's EVT lines (via ApplicationManager's serialReply):
- *   EVT,ENTRY              → "item detected"
- *   EVT,CAMERA             → ask the camera to classify (cameraRequested)
- *   EVT,DROPPED,BOTTLE|CAN → accepted: bump count + points
- *   EVT,REJECTED,<why>     → rejected: bump reject count + reason
+ * The KIOSK runs the sequence (the STM32 reads the 5 IR sensors and pushes
+ * EVT,IR,<1..5>,<1|0> edge events; the Arduino is a dumb belt+servo actuator).
+ * Sensor roles:  IR1 inlet · IR2 mid · IR3 camera/stop · IR4 bottle-drop ·
+ *                IR5 can-drop.
  *
- * Points (per item type):
- *   small bottle = 1,  large bottle = 2,  can = 2.   (1 point = 0.4 EGP)
- * The STM32 only sorts BOTTLE vs CAN (two baskets); the small-vs-large
- * distinction comes from the CAMERA verdict, so we remember the last
- * classified bottle size and award the right points when it drops.
+ * Flow (all driven from onSerialLine receiving the STM32's EVT,IR events):
+ *   IR1 ↑  → open the recycle counter page, belt FWD (continuous)   [Moving]
+ *   IR3 ↑  → belt STOP, run the camera (3 s, ≥0.70 conf)            [AtCamera]
+ *   verdict bottle → servo BOTTLE, belt FWD until IR4 ↑ drops it    [SortBottle]
+ *   verdict can    → servo CAN,    belt FWD until IR5 ↑ drops it    [SortCan]
+ *   verdict reject → belt REV to eject for a moment                 [Ejecting]
+ *   …then back to Idle for the next item, until the user taps Finish.
  *
- * Point values are admin-configurable and persisted in QSettings. Exposed
- * to QML as a singleton.
+ * Belt/servo are issued via sendCommand() (routed to the Arduino):
+ *   BELT:FWD · BELT:REV · BELT:STOP · SERVO:BOTTLE · SERVO:CAN · SERVO:NEUTRAL
+ *
+ * Points: small bottle = 1, large bottle = 2, can = 2 (1 pt = 0.4 EGP). The
+ * small-vs-large split comes from the camera verdict (remembered until drop).
+ * Bin-full is decided here from the cumulative counts (no more Arduino BASKETS).
+ *
+ * Point values are admin-configurable and persisted in QSettings. Exposed to
+ * QML as a singleton.
  */
 class RecycleSession : public QObject {
     Q_OBJECT
@@ -106,12 +114,36 @@ signals:
 
     void itemAccepted(const QString &type, int points);  /* drives the coin pop */
     void itemRejected(const QString &reason);
-    void itemEntered();                                  /* EVT,ENTRY (IR1) */
-    void cameraRequested();                              /* EVT,CAMERA */
-    void sendCommand(const QString &cmd);                /* → serial out */
+    void itemEntered();                                  /* IR1 tripped */
+    void cameraRequested();                              /* IR3 → classify now */
+    void sendCommand(const QString &cmd);                /* → Arduino (belt/servo) */
+    /** IR1 tripped from idle → QML should push the recycle counter page. */
+    void recyclePageRequested();
+    /** Session ended (Finish, or auto-end) → QML may pop back to home. */
+    void sessionEnded();
 
 private:
+    // ── Sequence state machine ──
+    enum Phase {
+        PhIdle,        // armed, waiting for an item at IR1
+        PhMoving,      // belt FWD, item travelling IR1 → IR3
+        PhAtCamera,    // belt stopped at IR3, classifying
+        PhSortBottle,  // servo BOTTLE, belt FWD until IR4 drop
+        PhSortCan,     // servo CAN,    belt FWD until IR5 drop
+        PhEjecting     // belt REV, ejecting a rejected item (timed)
+    };
     void setLast(const QString &s);
+    void onIrEdge(int sensor, bool blocked);   // sensor 1..5
+    void startSession();                       // arm + reset (auto on IR1)
+    void endSession();                         // disarm + stop everything
+    void maybeFinish();                        // honour a pending Finish at Idle
+    void armPhaseTimeout(int ms);              // safety: never run the belt forever
+    void creditBottle();
+    void creditCan();
+    void beltFwd();
+    void beltStop();
+    void beltRev();
+    void servo(const QString &which);
 
     int     m_smallBottles = 0;
     int     m_largeBottles = 0;
@@ -123,7 +155,16 @@ private:
     double  m_pointEGP = 0.4;          // 1 point = 0.4 EGP
     bool    m_pendingLargeBottle = false;  // last camera verdict was large?
     bool    m_active   = false;
+    bool    m_finishRequested = false; // user tapped Finish; end at next Idle
+    Phase   m_phase    = PhIdle;
+    class QTimer *m_phaseTimer = nullptr;  // belt-run safety watchdog
+    class QTimer *m_ejectTimer = nullptr;  // reject eject duration
     QString m_lastEvent;
+
+    // Timings (ms): how long the belt may run in one phase before the safety
+    // watchdog stops it, and how long to reverse to eject a rejected item.
+    static constexpr int kPhaseTimeoutMs = 15000;
+    static constexpr int kEjectMs        = 2500;
 
     // Persisted cumulative bin fill + fixed capacities.
     int     m_aluBin     = 0;       // cans in the aluminium bin

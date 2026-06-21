@@ -58,6 +58,9 @@ Rectangle {
         function onDataChanged() { page.refresh() }
     }
 
+    // Belt-and-suspenders auto-refresh while the page is open.
+    Timer { interval: 5000; repeat: true; running: true; onTriggered: page.refresh() }
+
     // ============ Top bar ============
     Rectangle {
         id: topBar

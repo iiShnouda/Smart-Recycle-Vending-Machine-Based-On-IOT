@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Recycle_Vending_Machine_LCD
+import "../../components"   // BounceOnPress (tactile press feedback)
 
 /*
  * AdminDiagnosticsPage — hardware self-test. Every actuator and sensor on the
@@ -30,7 +31,7 @@ Rectangle {
             anchors.leftMargin: 30
             width: 80; height: 80; radius: 40
             color: "#FFFFFF"
-            TapHandler { onTapped: stackView.pop() }
+            BounceOnPress { onTapped: stackView.pop() }
             Text { anchors.centerIn: parent; text: "←"
                    font.pixelSize: 36; color: "#1F2A1B" }
         }
@@ -83,7 +84,7 @@ Rectangle {
                 width: 80; height: 80; radius: 40
                 color: "transparent"
                 border.width: 2; border.color: "#A5F3FC"
-                TapHandler { onTapped: Diagnostics.clearResults() }
+                BounceOnPress { onTapped: Diagnostics.clearResults() }
                 Text { anchors.centerIn: parent; text: "↻"
                        color: "#A5F3FC"; font.pixelSize: 36; font.weight: Font.Black }
             }
@@ -157,7 +158,7 @@ Rectangle {
                         width: 140; height: 56; radius: 28
                         color: buttonColor
                         anchors.verticalCenter: parent.verticalCenter
-                        TapHandler { onTapped: triggered() }
+                        BounceOnPress { onTapped: triggered() }
                         Text { anchors.centerIn: parent
                                text: buttonText
                                color: "#FFFFFF"
@@ -215,7 +216,7 @@ Rectangle {
                         Rectangle {
                             width: 140; height: 52; radius: 26; color: "#0891B2"
                             anchors.verticalCenter: parent.verticalCenter
-                            TapHandler { onTapped: Diagnostics.testIr() }
+                            BounceOnPress { onTapped: Diagnostics.testIr() }
                             Text { anchors.centerIn: parent; text: qsTr("Read")
                                    color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.ExtraBold }
                         }
@@ -310,14 +311,14 @@ Rectangle {
                         Rectangle {
                             width: 100; height: 56; radius: 28; color: "#16A34A"
                             anchors.verticalCenter: parent.verticalCenter
-                            TapHandler { onTapped: Diagnostics.testRelay(modelData.idx, true) }
+                            BounceOnPress { onTapped: Diagnostics.testRelay(modelData.idx, true) }
                             Text { anchors.centerIn: parent; text: qsTr("On")
                                    color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.ExtraBold }
                         }
                         Rectangle {
                             width: 100; height: 56; radius: 28; color: "#6B7280"
                             anchors.verticalCenter: parent.verticalCenter
-                            TapHandler { onTapped: Diagnostics.testRelay(modelData.idx, false) }
+                            BounceOnPress { onTapped: Diagnostics.testRelay(modelData.idx, false) }
                             Text { anchors.centerIn: parent; text: qsTr("Off")
                                    color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.ExtraBold }
                         }

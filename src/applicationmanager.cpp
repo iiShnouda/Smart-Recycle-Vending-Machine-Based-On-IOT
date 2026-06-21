@@ -263,14 +263,17 @@ void ApplicationManager::initialize()
             });
 
     // ── Recycle session ────────────────────────────────────────────────
-    // The recycle counter (RecycleSession) is driven by the Arduino's EVT
-    // lines and sends RECYCLE/VERDICT/BASKETS back out over serial.
+    // The KIOSK owns the recycle sequence now:
+    //   • the STM32 reads the 5 IR sensors and pushes EVT,IR,<1..5>,<1|0> →
+    //     feed those into RecycleSession (the state machine).
+    //   • RecycleSession drives the belt + sorting servo via sendCommand →
+    //     route those out to the ARDUINO (BELT:FWD/STOP/REV, SERVO:BOTTLE/CAN…).
     new RecycleSession(this);
     if (RecycleSession::s_instance) {
-        // Recycle runs on the ARDUINO, not the STM32. Feed its EVT,* lines
-        // in, and route RECYCLE/VERDICT/BASKETS back out to it.
-        connect(m_arduino, &Serial_Connection::replyReceived,
+        // IR edge events come from the STM32 link.
+        connect(m_serial, &Serial_Connection::replyReceived,
                 RecycleSession::s_instance, &RecycleSession::onSerialLine);
+        // Belt + servo commands go out to the Arduino actuator.
         connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
                 this, [this](const QString &cmd){
                     if (!m_arduino) return;
@@ -280,8 +283,8 @@ void ApplicationManager::initialize()
                                               Q_ARG(int, 3000));
                 });
 
-        // Camera "brain": EVT,CAMERA → run the headless recycle classifier
-        // (CSI cam + YOLO) → send VERDICT BOTTLE|CAN|REJECT back to the Arduino.
+        // Camera "brain": IR3 (belt stopped) → run the headless recycle
+        // classifier (CSI cam + YOLO, 3 s, ≥0.70) → verdict drives the sort.
         m_recycleClassifier = new RecycleClassifier(this);
         connect(RecycleSession::s_instance, &RecycleSession::cameraRequested,
                 m_recycleClassifier, &RecycleClassifier::classify);

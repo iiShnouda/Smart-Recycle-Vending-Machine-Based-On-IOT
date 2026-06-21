@@ -83,6 +83,22 @@ Window {
         }
     }
 
+    // ===== Recycle auto-open =====
+    // An item breaking IR1 while the machine is idle at the home screen jumps
+    // straight to the live recycle counter (RecycleSession auto-arms itself and
+    // starts the belt in C++). Guarded to depth<=1 so it never hijacks a
+    // vending / auth / admin flow that's already in progress.
+    Connections {
+        target: RecycleSession
+        function onRecyclePageRequested() {
+            if (mainStackView.depth <= 1) {
+                Idle.disable()
+                mainStackView.push(recycleCounterComponent)
+            }
+        }
+    }
+    Component { id: recycleCounterComponent; RecycleSessionPage {} }
+
     // Any touch anywhere on the window resets the timer.
     MouseArea {
         anchors.fill: parent

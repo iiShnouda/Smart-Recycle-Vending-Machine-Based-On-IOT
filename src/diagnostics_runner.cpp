@@ -84,10 +84,10 @@ QString DiagnosticsRunner::relayCmd(int idx, bool on)
 // ── Tests ────────────────────────────────────────────────────────────────────
 void DiagnosticsRunner::testPing() { send(QStringLiteral("PING"), 500); }
 
-// CHANGED: the 5 IR sensors (inlet break-beam, etc.) live on the recycle
-// Arduino now, not the STM32. Its "IR" handler replies "OK IR:0x<mask>"
-// (5-bit hex, bit i = sensor i asserted). Route there instead of the STM32.
-void DiagnosticsRunner::testIr()   { sendArduino(QStringLiteral("IR"), 800); }
+// The 5 recycle-lane IR sensors are back on the STM32 (PA1/PA0/PC15/PC14/PC13).
+// Its "IR" handler replies "OK IR:0x<mask>" (5-bit hex, bit i = sensor i+1
+// asserted). Route to the STM32.
+void DiagnosticsRunner::testIr()   { send(QStringLiteral("IR"), 800); }
 
 void DiagnosticsRunner::testMotor(int slot)
 {
@@ -129,9 +129,9 @@ void DiagnosticsRunner::testRunAll()
 {
     // Only the quick, side-effect-free checks. Motors, conveyor, relays and
     // the servo are fired individually so the operator watches each one move.
-    // Note: this now reaches both the STM32 (PING, WEIGH_ALL, DOOR) and the
-    // Arduino (IR) — if the Arduino link isn't up yet, the IR row will show
-    // a failure/timeout even though the STM32 checks pass.
+    // These all reach the STM32 (PING, IR, WEIGH_ALL, DOOR). The recycle belt +
+    // sorting servo are on the Arduino and fired individually (testConveyor)
+    // so the operator can watch them move.
     testPing();
     testIr();
     testCell(1);     // one WEIGH_ALL fills all 8 cell rows

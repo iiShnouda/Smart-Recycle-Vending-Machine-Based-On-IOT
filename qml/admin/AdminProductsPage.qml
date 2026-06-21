@@ -21,8 +21,12 @@ Rectangle {
     property StackView stackView: StackView.view
     property int editingSlot: -1
 
-    Component.onCompleted: Idle.disable()
-    StackView.onActivated: Idle.disable()
+    Component.onCompleted: { Idle.disable(); ProductsModel.reload() }
+    StackView.onActivated: { Idle.disable(); ProductsModel.reload() }
+
+    // Auto-refresh so products added here (or from the phone app over MQTT)
+    // appear without tapping the ↻ reload button.
+    Timer { interval: 5000; repeat: true; running: true; onTriggered: ProductsModel.reload() }
 
     // ══════════════════════════ HEADER ══════════════════════════
     Rectangle {
@@ -253,7 +257,7 @@ Rectangle {
         parent: Overlay.overlay
         anchors.centerIn: parent
         width: 880
-        height: 860
+        height: 980          // room for the in-content Save/Cancel + suggestions
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape
@@ -412,21 +416,20 @@ Rectangle {
                 text: qsTr("In stock (available to buy)")
                 font.pixelSize: 18
             }
-        }
 
-        // Explicit footer buttons. The Dialog's standardButtons weren't firing
-        // onAccepted on the kiosk (so nothing ever saved); a tap here calls the
-        // save directly.
-        footer: Rectangle {
-            implicitHeight: 104
-            color: "transparent"
+            // Save / Cancel live INSIDE the dialog content (NOT Dialog.footer).
+            // The footer taps weren't landing on the kiosk, so setProduct() was
+            // never called and nothing ever saved. In the content area — where
+            // the text fields already work — the tap is reliable. BounceOnPress
+            // adds a tactile press + fires saveSlot().
+            Item { width: 1; height: 8 }
             Row {
-                anchors.centerIn: parent
+                anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 16
                 Rectangle {
-                    width: 320; height: 76; radius: 38
+                    width: 300; height: 76; radius: 38
                     color: editName.text.trim().length > 0 ? "#16A34A" : "#9CA3AF"
-                    TapHandler {
+                    BounceOnPress {
                         enabled: editName.text.trim().length > 0
                         onTapped: editDialog.saveSlot()
                     }
@@ -434,9 +437,9 @@ Rectangle {
                            color: "#FFFFFF"; font.pixelSize: 24; font.weight: Font.ExtraBold }
                 }
                 Rectangle {
-                    width: 200; height: 76; radius: 38
+                    width: 180; height: 76; radius: 38
                     color: "transparent"; border.width: 2; border.color: "#9CA3AF"
-                    TapHandler { onTapped: editDialog.close() }
+                    BounceOnPress { onTapped: editDialog.close() }
                     Text { anchors.centerIn: parent; text: qsTr("Cancel")
                            color: "#5A6B52"; font.pixelSize: 22; font.weight: Font.Bold }
                 }
@@ -444,6 +447,7 @@ Rectangle {
         }
 
         function saveSlot() {
+            Qt.inputMethod.hide()        // drop the on-screen keyboard
             ProductsModel.setProduct(page.editingSlot, editName.text.trim(),
                                      parseInt(editPrice.text || "0"),
                                      editImage.text, editActive.checked)
