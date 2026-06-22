@@ -310,9 +310,12 @@ void Serial_Connection::onReadyRead()
 
         // Try to resolve the in-flight command if this looks like an ACK.
         if (!m_pending.command.isEmpty()) {
-            const bool ok  = reply.startsWith("Done", Qt::CaseInsensitive)
-            || reply.startsWith("OK",   Qt::CaseInsensitive)
-                || reply.startsWith("PONG", Qt::CaseInsensitive);
+            const bool isDispense = m_pending.command.startsWith("DISPENSE", Qt::CaseInsensitive);
+            const bool isStepOk   = reply.startsWith("Done STEP", Qt::CaseInsensitive);
+            
+            const bool ok  = (reply.startsWith("Done", Qt::CaseInsensitive) && !(isDispense && isStepOk))
+                          || reply.startsWith("OK",   Qt::CaseInsensitive)
+                          || reply.startsWith("PONG", Qt::CaseInsensitive);
             const bool err = reply.startsWith("Error", Qt::CaseInsensitive);
 
             if (ok || err) {
