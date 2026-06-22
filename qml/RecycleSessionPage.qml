@@ -13,6 +13,7 @@ Rectangle {
     objectName: "recycleSessionPage"
     color: "#F2F4ED"
     property StackView stackView: StackView.view
+    property string passedUserId: ""
 
     // The waiting page already armed the session (RecycleSession.start);
     // we just display the live tally here so we don't reset mid-sequence.
@@ -206,5 +207,5 @@ Rectangle {
                color: "#FFFFFF"; font.pixelSize: 34; font.weight: Font.ExtraBold }
     }
 
-    Component { id: summaryComp; RecycleSummaryPage {} }
+    Component { id: summaryComp; RecycleSummaryPage { userId: page.passedUserId || "" } }
 }

@@ -48,6 +48,7 @@ class FaceRecSidecar : public QObject {
     // (enrollCount) out of enrollTotal (3). Drives the "N / 3" label + arc.
     Q_PROPERTY(int     enrollCount   READ enrollCount   NOTIFY enrollProgressChanged)
     Q_PROPERTY(int     enrollTotal   READ enrollTotal   NOTIFY enrollProgressChanged)
+    Q_PROPERTY(int     lastUserId    READ lastUserId    NOTIFY identified)
 
 public:
     explicit FaceRecSidecar(QObject *parent = nullptr);

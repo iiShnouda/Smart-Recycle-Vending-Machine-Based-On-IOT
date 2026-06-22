@@ -287,13 +287,11 @@ Rectangle {
         }
     }
 
-    // ===== Counting page transition =====
+    // ===== Session page transition =====
     Component {
         id: countingPageComponent
-        RecycleCountingPage {
-            userId: waitingPage.userId
-            plasticTankVolume: waitingPage.plasticTankVolume
-            canTankVolume: waitingPage.canTankVolume
+        RecycleSessionPage {
+            passedUserId: waitingPage.userId
         }
     }
 

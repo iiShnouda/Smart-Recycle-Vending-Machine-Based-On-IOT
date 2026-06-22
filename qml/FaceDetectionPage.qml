@@ -44,7 +44,7 @@ Rectangle {
         function onIdentified(name, score) {
             status = 1
             successPause.userName = name
-            var uid = FaceRec.lastUserId.toString()
+            var uid = String(FaceRec.lastUserId)
             successPause.userId = uid
             successPause.userPoints = appManager.getUserPoints(uid)
             successPause.start()

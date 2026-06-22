@@ -65,32 +65,26 @@ Rectangle {
         }
         var item = cart[dispensingIndex]
         dispensingStatus = qsTr("Dispensing ") + item.name + "…"
-        appManager.sendSerial("DISPENSE:" + item.slot, 12000)
+        // Fire-and-forget: send the motor command to STM32, don't wait for ACK
+        appManager.sendSerial("DISPENSE:" + item.slot, 0)
+        // Instantly process as dispensed
+        vendingPage.userPoints   -= item.points
+        vendingPage.pointsUsed   += item.points
+        vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
+        ProductsModel.decrementCount(item.slot)
+        if (vendingPage.userId !== "") {
+            appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
+        }
+        dispensingIndex++
+        // Brief delay so the user sees the dispensing overlay per item
+        dispenseNextTimer.start()
     }
 
-    Connections {
-        target: appManager
-        function onSerialCommandSucceeded(cmd, reply) {
-            if (!vendingPage.dispensing || !cmd.startsWith("DISPENSE:")) return
-            var item = cart[dispensingIndex]
-            vendingPage.userPoints   -= item.points
-            vendingPage.pointsUsed   += item.points
-            vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
-            ProductsModel.decrementCount(item.slot)
-            if (vendingPage.userId !== "") {
-                appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
-            }
-            dispensingIndex++; sendNextDispense()
-        }
-        function onSerialCommandFailed(cmd, reason) {
-            if (!vendingPage.dispensing || !cmd.startsWith("DISPENSE:")) return
-            var item = cart[dispensingIndex]
-            ProductsModel.setActive(item.slot, false)   // disable the broken slot
-            sorryDialog.failedItem = item
-            sorryDialog.failedReason = reason
-            sorryDialog.open()
-            dispensingIndex++; sendNextDispense()
-        }
+    Timer {
+        id: dispenseNextTimer
+        interval: 500
+        repeat: false
+        onTriggered: sendNextDispense()
     }
 
     Component.onCompleted: { Idle.touch(); ProductsModel.reload() }
