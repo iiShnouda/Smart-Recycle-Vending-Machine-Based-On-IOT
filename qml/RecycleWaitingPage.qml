@@ -240,7 +240,7 @@ Rectangle {
         anchors.top: noticeWrap.bottom
         anchors.topMargin: 50
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 8
+        spacing: 25
 
         Text {
             id: attentionText
@@ -260,6 +260,37 @@ Rectangle {
             }
         }
 
+        // ===== Proceed Button =====
+        Rectangle {
+            id: procedButton
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 360
+            height: 80
+            radius: 40
+            color: "#16A34A"
+            scale: proceedTap.pressed ? 0.95 : 1.0
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
+            TapHandler {
+                id: proceedTap
+                onTapped: {
+                    Idle.touch()
+                    appManager.sendArduino("START")
+                    if (!waitingPage.navigated) {
+                        waitingPage.navigated = true
+                        stackView.push(sessionPageComponent)
+                    }
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("Proceed")
+                color: "#FFFFFF"
+                font.pixelSize: 28
+                font.weight: Font.ExtraBold
+            }
+        }
     }
 
     // ===== Counting page transition =====

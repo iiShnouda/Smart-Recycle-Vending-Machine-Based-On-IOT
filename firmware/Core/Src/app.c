@@ -90,10 +90,24 @@ static void handle(char *line)
     if (!strcmp(cmd, "RELAY") && n >= 3) { BSP_Relay((uint8_t)a, b!=0); reply("OK\n"); return; }
     if (!strcmp(cmd, "SERVO") && n >= 2) { Servo_SetAngle((uint8_t)a);  reply("OK\n"); return; }
 
-    if (!strcmp(cmd, "DISPENSE") && n >= 2) {      /* a = slot 0..7 */
-        /* Full open-gate -> rotate 1 rev -> close-gate sequence; the Pi
-         * waits for EVT,DISPENSED,<slot> before sending the next item. */
-        reply(Vend_Dispense((uint8_t)a) ? "OK\n" : "ERR,BUSY\n");
+    if (!strcmp(cmd, "DISPENSE") || !strncmp(line, "DISPENSE:", 9)) {
+        int slot = -1;
+        if (!strcmp(cmd, "DISPENSE") && n >= 2) {
+            slot = a; // 0-based
+        } else {
+            // Parse "DISPENSE:<slot>" where slot is 1-based (1..8)
+            const char *p = line + 9;
+            while (*p == ' ' || *p == ':') p++;
+            int s = atoi(p);
+            if (s >= 1 && s <= 8) {
+                slot = s - 1; // Convert to 0-based
+            }
+        }
+        if (slot >= 0 && slot < 8) {
+            reply(Vend_Dispense((uint8_t)slot) ? "OK\n" : "Error BUSY\n");
+        } else {
+            reply("Error range\n");
+        }
         return;
     }
     if (!strcmp(cmd, "AUGER") && n >= 2) {         /* a=steps, b=hz */

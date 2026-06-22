@@ -84,10 +84,7 @@ QString DiagnosticsRunner::relayCmd(int idx, bool on)
 // ── Tests ────────────────────────────────────────────────────────────────────
 void DiagnosticsRunner::testPing() { send(QStringLiteral("PING"), 500); }
 
-// The 5 recycle-lane IR sensors are back on the STM32 (PA1/PA0/PC15/PC14/PC13).
-// Its "IR" handler replies "OK IR:0x<mask>" (5-bit hex, bit i = sensor i+1
-// asserted). Route to the STM32.
-void DiagnosticsRunner::testIr()   { send(QStringLiteral("IR"), 800); }
+
 
 void DiagnosticsRunner::testMotor(int slot)
 {
@@ -114,7 +111,7 @@ void DiagnosticsRunner::testServo(int deg)
 {
     if (deg < 0)   deg = 0;
     if (deg > 180) deg = 180;
-    send(QStringLiteral("ANGLE:%1").arg(deg), 800);   // → "OK ANGLE:<deg>"
+    sendArduino(QStringLiteral("ANGLE:%1").arg(deg), 800);   // → "OK ANGLE:<deg>"
 }
 
 void DiagnosticsRunner::testRelay(int idx, bool on)
@@ -133,7 +130,6 @@ void DiagnosticsRunner::testRunAll()
     // sorting servo are on the Arduino and fired individually (testConveyor)
     // so the operator can watch them move.
     testPing();
-    testIr();
     testCell(1);     // one WEIGH_ALL fills all 8 cell rows
     testDoor();
 }

@@ -32,8 +32,6 @@ public:
     QVariantMap results() const { return m_results; }
 public slots:
     Q_INVOKABLE void testPing();
-    Q_INVOKABLE void testIr();                       // 5-sensor mask — ARDUINO
-    Q_INVOKABLE void testStatus() { testIr(); }      // back-compat alias
     Q_INVOKABLE void testMotor(int slot);            // 1..8 — one revolution
     Q_INVOKABLE void testConveyor();                 // recycle belt — ARDUINO
     Q_INVOKABLE void testCell(int slot);             // 1..8

@@ -190,59 +190,6 @@ Rectangle {
             TestRow { label: qsTr("Admin door"); cmd: "DOOR";
                       onTriggered: Diagnostics.testDoor() }
 
-            // ── IR sensors (one command returns a 5-bit mask) ──
-            SectionHeader { title: qsTr("IR sensors")
-                            note: (AppManager.arduinoConnected ? qsTr("F1–F5 inlet / lane beams")
-                                                               : qsTr("Arduino offline — check the GPIO UART link")) }
-            Rectangle {
-                id: irCard
-                width: parent.width; height: 120; radius: 18
-                color: "#FFFFFF"; border.width: 1; border.color: "#D8E0CF"
-                property var entry: Diagnostics.results["IR"] || null
-                // Parse "OK IR:0x1F" → 0x1F. Bit i set = sensor F(i+1) detects something.
-                property int mask: {
-                    if (!entry || !entry.ok) return -1
-                    var m = (entry.reply || "").match(/0x([0-9A-Fa-f]+)/)
-                    return m ? parseInt(m[1], 16) : -1
-                }
-                Column {
-                    anchors.fill: parent; anchors.margins: 16; spacing: 12
-                    Row {
-                        width: parent.width
-                        Text { text: qsTr("Hold an object in front, then tap Read")
-                               color: "#5A6B52"; font.pixelSize: 16
-                               anchors.verticalCenter: parent.verticalCenter }
-                        Item { width: parent.width - 360; height: 1 }
-                        Rectangle {
-                            width: 140; height: 52; radius: 26; color: "#0891B2"
-                            anchors.verticalCenter: parent.verticalCenter
-                            BounceOnPress { onTapped: Diagnostics.testIr() }
-                            Text { anchors.centerIn: parent; text: qsTr("Read")
-                                   color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.ExtraBold }
-                        }
-                    }
-                    Row {
-                        spacing: 14
-                        Repeater {
-                            model: 5
-                            delegate: Column {
-                                required property int index
-                                spacing: 4
-                                Rectangle {
-                                    width: 54; height: 36; radius: 10
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: irCard.mask < 0 ? "#E5E7EB"
-                                          : ((irCard.mask & (1 << index)) ? "#16A34A" : "#CBD5C0")
-                                }
-                                Text { text: "F" + (index + 1)
-                                       anchors.horizontalCenter: parent.horizontalCenter
-                                       color: "#1F2A1B"; font.pixelSize: 16; font.weight: Font.Bold }
-                            }
-                        }
-                    }
-                }
-            }
-
             // ── Steppers (one revolution each, via the 595 mux) ──
             SectionHeader { title: qsTr("Vending motors")
                             note: qsTr("⚠ 12 V motor PSU on — one full turn") }
