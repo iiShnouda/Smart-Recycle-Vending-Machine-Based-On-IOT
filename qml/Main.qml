@@ -91,10 +91,16 @@ Window {
     Connections {
         target: RecycleSession
         function onRecyclePageRequested() {
-            if (mainStackView.depth <= 1) {
-                Idle.disable()
-                mainStackView.push(recycleCounterComponent)
-            }
+            // Allow auto-open from ANY page except admin or an already-active
+            // recycle flow. The old "depth <= 1" guard silently dropped the
+            // signal whenever the user had navigated past StartPage.
+            var current = mainStackView.currentItem
+                        ? mainStackView.currentItem.objectName : ""
+            if (current.indexOf("admin") >= 0
+                || current.indexOf("recycle") >= 0) return
+            Idle.disable()
+            while (mainStackView.depth > 1) mainStackView.pop()
+            mainStackView.push(recycleCounterComponent)
         }
     }
     Component { id: recycleCounterComponent; RecycleSessionPage {} }

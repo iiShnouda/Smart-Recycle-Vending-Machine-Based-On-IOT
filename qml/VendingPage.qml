@@ -131,26 +131,6 @@ Rectangle {
                        anchors.verticalCenter: parent.verticalCenter }
             }
         }
-        // Cart pill
-        Rectangle {
-            visible: cart.length > 0
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom; anchors.bottomMargin: 14
-            height: 60; radius: 30; width: cartRow.implicitWidth + 40; color: "#16A34A"
-            TapHandler { onTapped: checkoutDialog.open() }
-            Row {
-                id: cartRow; anchors.centerIn: parent; spacing: 10
-                Text { text: "🛒"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: cart.length + " " + qsTr("items"); color: "#FFFFFF"
-                       font.pixelSize: 18; font.weight: Font.ExtraBold
-                       anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "•"; color: "#FFFFFF"; opacity: 0.5
-                       anchors.verticalCenter: parent.verticalCenter }
-                Text { text: cartTotal() + " " + qsTr("pts"); color: "#A5F3FC"
-                       font.pixelSize: 18; font.weight: Font.ExtraBold
-                       anchors.verticalCenter: parent.verticalCenter }
-            }
-        }
     }
 
     // ═══════════ PRODUCT GRID (bound straight to ProductsModel) ═══════════
@@ -253,6 +233,28 @@ Rectangle {
                     onTapped: addToCart(slot, name, pricePoints, imagePath)
                 }
             }
+        }
+    }
+
+    // Cart pill
+    Rectangle {
+        visible: cart.length > 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+        height: 60; radius: 30; width: cartRow.implicitWidth + 40; color: "#16A34A"
+        z: 10
+        TapHandler { onTapped: checkoutDialog.open() }
+        Row {
+            id: cartRow; anchors.centerIn: parent; spacing: 10
+            Text { text: "🛒"; font.pixelSize: 24; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: cart.length + " " + qsTr("items"); color: "#FFFFFF"
+                   font.pixelSize: 18; font.weight: Font.ExtraBold
+                   anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "•"; color: "#FFFFFF"; opacity: 0.5
+                   anchors.verticalCenter: parent.verticalCenter }
+            Text { text: cartTotal() + " " + qsTr("pts"); color: "#A5F3FC"
+                   font.pixelSize: 18; font.weight: Font.ExtraBold
+                   anchors.verticalCenter: parent.verticalCenter }
         }
     }
 
