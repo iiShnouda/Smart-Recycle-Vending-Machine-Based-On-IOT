@@ -241,7 +241,7 @@ Rectangle {
                         // configuring it because you just loaded the product, so
                         // it should be immediately buyable in vending.
                         editActive.checked  = isEmpty ? true : isActive
-                        editInStock.checked = isEmpty ? true : (count > 0)
+                        editCount.text      = count.toString()
                         editDialog.nameCandidates = []
                         editDialog.open()
                     }
@@ -411,10 +411,15 @@ Rectangle {
                 font.pixelSize: 18
             }
 
-            CheckBox {
-                id: editInStock
-                text: qsTr("In stock (available to buy)")
-                font.pixelSize: 18
+            Text { text: qsTr("Stock Count"); font.pixelSize: 16; color: "#5A6B52" }
+            TextField {
+                id: editCount
+                width: parent.width
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 99 }
+                font.pixelSize: 24
+                font.weight: Font.DemiBold
+                placeholderText: qsTr("e.g. 10")
             }
 
             // Save / Cancel live INSIDE the dialog content (NOT Dialog.footer).
@@ -451,7 +456,7 @@ Rectangle {
             ProductsModel.setProduct(page.editingSlot, editName.text.trim(),
                                      parseInt(editPrice.text || "0"),
                                      editImage.text, editActive.checked)
-            ProductsModel.setInStock(page.editingSlot, editInStock.checked)
+            ProductsModel.setCount(page.editingSlot, parseInt(editCount.text || "0"))
             ProductsModel.reload()
             editDialog.close()
         }
@@ -602,73 +607,5 @@ Rectangle {
         }
     }
 
-    // ══════════════════════ CALIBRATION PROMPT ══════════════════════
-    // Shown right after configuring a product whose slot isn't calibrated.
-    // Calibration is the ONLY thing that makes counting automatic — so we
-    // nudge the admin to do the one-time scale setup instead of asking them
-    // to type stock numbers. Skipping is fine: the slot is assumed in-stock
-    // until the scale is calibrated.
-    Dialog {
-        id: calibratePrompt
-        property int    slotNo: -1
-        property string prodName: ""
-
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        modal: true
-        focus: true
-        closePolicy: Popup.NoAutoClose
-        Overlay.modal: Rectangle { color: "#B0000000" }
-        width: 720; height: 460
-        standardButtons: Dialog.NoButton
-
-        Column {
-            anchors.fill: parent
-            anchors.margins: 24
-            spacing: 18
-
-            Text { text: "⚖"; font.pixelSize: 76
-                   anchors.horizontalCenter: parent.horizontalCenter }
-            Text {
-                text: qsTr("Set up automatic stock counting?")
-                color: "#1F2A1B"; font.pixelSize: 28; font.weight: Font.ExtraBold
-                horizontalAlignment: Text.AlignHCenter; width: parent.width
-                wrapMode: Text.WordWrap
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            Text {
-                text: qsTr("Calibrate the shelf scale for “%1” once, and the machine auto-counts every restock — no manual numbers. Until then this slot is shown in stock.")
-                          .arg(calibratePrompt.prodName)
-                color: "#5A6B52"; font.pixelSize: 17
-                horizontalAlignment: Text.AlignHCenter; width: parent.width
-                wrapMode: Text.WordWrap
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            Row {
-                spacing: 16
-                anchors.horizontalCenter: parent.horizontalCenter
-                Rectangle {
-                    width: 300; height: 76; radius: 38; color: "#16A34A"
-                    TapHandler {
-                        onTapped: {
-                            calibratePrompt.close()
-                            // Re-open the slot editor; its calibration block
-                            // auto-expands because the slot isn't calibrated.
-                            page.editingSlot = calibratePrompt.slotNo
-                            editDialog.open()
-                        }
-                    }
-                    Text { anchors.centerIn: parent; text: qsTr("Calibrate now")
-                           color: "#FFFFFF"; font.pixelSize: 22; font.weight: Font.ExtraBold }
-                }
-                Rectangle {
-                    width: 260; height: 76; radius: 38
-                    color: "transparent"; border.width: 2; border.color: "#9CA3AF"
-                    TapHandler { onTapped: calibratePrompt.close() }
-                    Text { anchors.centerIn: parent; text: qsTr("Skip for now")
-                           color: "#5A6B52"; font.pixelSize: 20; font.weight: Font.Bold }
-                }
-            }
-        }
-    }
+    // (Calibration prompt removed because load cells were removed)
 }

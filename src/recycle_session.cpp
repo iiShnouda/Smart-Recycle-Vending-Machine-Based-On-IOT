@@ -34,9 +34,10 @@ void RecycleSession::start()
     m_smallBottles = m_largeBottles = m_cans = m_rejected = 0;
     m_pendingLargeBottle = false;
     emit countsChanged();
-    setLast(tr("Insert a bottle or can"));
+    setLast(tr("Scanning…"));
     if (!m_active) { m_active = true; emit activeChanged(); }   // → recycle light on
     emit sendCommand(QStringLiteral("RECYCLE 1"));              // arm the Arduino lane
+    emit cameraRequested();                                     // start the camera immediately
     Logger::audit("Recycle", "Session started");
 }
 
@@ -64,6 +65,12 @@ void RecycleSession::setCounts(int bottles, int cans)
 void RecycleSession::sendVerdict(const QString &v)
 {
     emit sendCommand(QStringLiteral("VERDICT ") + v.toUpper());
+}
+
+void RecycleSession::triggerCamera()
+{
+    setLast(tr("Scanning…"));
+    emit cameraRequested();
 }
 
 void RecycleSession::onCameraVerdict(const QString &cls)
@@ -120,12 +127,13 @@ void RecycleSession::onSerialLine(const QString &line)
     if (!m_active && !line.startsWith("EVT,READY")) return;
 
     if (line.startsWith("EVT,ENTRY")) {
+        // Obsolete (no IR sensors), but kept just in case
         setLast(tr("Item detected — moving in…"));
-        emit recyclePageRequested();        // open the counter page (from home)
-        emit itemEntered();                 // waiting page → push the counter
+        emit recyclePageRequested();
+        emit itemEntered();
     } else if (line.startsWith("EVT,CAMERA")) {
+        // Also obsolete now, camera starts on entry
         setLast(tr("Scanning…"));
-        emit cameraRequested();             // → RecycleClassifier (window, ≥0.70)
     } else if (line.startsWith("EVT,DROPPED,BOTTLE")) {
         creditBottle();
     } else if (line.startsWith("EVT,DROPPED,CAN")) {

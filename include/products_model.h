@@ -77,6 +77,9 @@ public slots:
      *  buyable when count > 0.                                            */
     Q_INVOKABLE bool setInStock(int slot, bool inStock);
 
+    /** Manually set exact stock count. */
+    Q_INVOKABLE bool setCount(int slot, int count);
+
     /** Apply a raw HX711 reading from the InventoryScanner. Re-computes
      *  the count using stored calibration constants; logs a restock_events
      *  row if the count changed since last scan. Returns the new count.  */

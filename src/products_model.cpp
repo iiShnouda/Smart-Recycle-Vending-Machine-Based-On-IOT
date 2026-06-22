@@ -205,6 +205,18 @@ bool ProductsModel::setInStock(int slot, bool inStock)
     return true;
 }
 
+bool ProductsModel::setCount(int slot, int count)
+{
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
+    if (count < 0) count = 0;
+    Row &r = m_rows[slot - 1];
+    r.count = count;
+    m_db->setProductCount(slot, count, r.weightG);
+    const QModelIndex idx = index(slot - 1);
+    emit dataChanged(idx, idx, { RoleCount });
+    return true;
+}
+
 int ProductsModel::ingestRawReading(int slot, int raw, const QString &source)
 {
     Q_UNUSED(source);

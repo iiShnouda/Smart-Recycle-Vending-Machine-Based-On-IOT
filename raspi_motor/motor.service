@@ -1,0 +1,13 @@
+[Unit]
+Description=TMC2209 stepper test - alternating CW/CCW forever
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/motor.py
+Restart=no
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

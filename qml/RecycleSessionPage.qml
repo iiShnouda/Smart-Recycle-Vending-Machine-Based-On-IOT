@@ -194,6 +194,20 @@ Rectangle {
         }
     }
 
+    // ── Scan Next Item button ──
+    Rectangle {
+        id: scanBtn
+        anchors.top: banner.bottom; anchors.topMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 320; height: 80; radius: 40; color: "#0891B2"
+        scale: scanTap.pressed ? 0.95 : 1.0
+        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+        TapHandler { id: scanTap; onTapped: RecycleSession.triggerCamera() }
+        Text { anchors.centerIn: parent
+               text: qsTr("Scan next item")
+               color: "#FFFFFF"; font.pixelSize: 26; font.weight: Font.ExtraBold }
+    }
+
     // ── Finish button ──
     Rectangle {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 50

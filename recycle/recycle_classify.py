@@ -46,6 +46,7 @@ _TRAIN_W = os.path.join(HOME, "final_yolo_dataset_204/runs/detect/train/weights"
 
 def _default_model():
     cands = [
+        os.path.join(os.path.dirname(__file__), "best.pt"), # New custom model
         os.path.join(_KIOSK_MODELS, "recycle.onnx"),        # NEW 3-class
         os.path.join(_TRAIN_W, "best_ncnn_model"),          # old 2-class (fast)
         os.path.join(_TRAIN_W, "best.pt"),
@@ -58,7 +59,7 @@ def _default_model():
 MODEL = os.environ.get("RECYCLE_MODEL", _default_model())
 NAMES = os.environ.get("RECYCLE_NAMES", os.path.join(_KIOSK_MODELS, "recycle.names"))
 CAM   = int(os.environ.get("RECYCLE_CAM", "0"))
-CONF  = float(os.environ.get("RECYCLE_CONF", "0.60"))
+CONF  = float(os.environ.get("RECYCLE_CONF", "0.66"))
 BURST = float(os.environ.get("RECYCLE_BURST", "3.0"))
 IMGSZ = int(os.environ.get("RECYCLE_IMGSZ", "320"))
 HINT  = 0.35   # keep low-conf boxes for logging; ACCEPT gate is CONF

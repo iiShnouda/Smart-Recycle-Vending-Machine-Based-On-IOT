@@ -59,7 +59,7 @@ qt_add_qml_module(appRecycle_Vending_Machine_LCD
         qml/QRCodePage.qml
         qml/QrLoginPage.qml
         qml/StartPage.qml
-        qml/RecycleCountingPage.qml
+
         qml/LanguageSelectionPage.qml
         qml/Theme.qml
         qml/AdvertisePage.qml
