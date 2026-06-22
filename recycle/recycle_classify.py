@@ -58,7 +58,7 @@ def _default_model():
 MODEL = os.environ.get("RECYCLE_MODEL", _default_model())
 NAMES = os.environ.get("RECYCLE_NAMES", os.path.join(_KIOSK_MODELS, "recycle.names"))
 CAM   = int(os.environ.get("RECYCLE_CAM", "0"))
-CONF  = float(os.environ.get("RECYCLE_CONF", "0.70"))
+CONF  = float(os.environ.get("RECYCLE_CONF", "0.60"))
 BURST = float(os.environ.get("RECYCLE_BURST", "3.0"))
 IMGSZ = int(os.environ.get("RECYCLE_IMGSZ", "320"))
 HINT  = 0.35   # keep low-conf boxes for logging; ACCEPT gate is CONF

@@ -78,6 +78,7 @@ public:
 public slots:
     Q_INVOKABLE void start();                       /* arm the Arduino lane (RECYCLE 1) */
     Q_INVOKABLE int  finish();                      /* disarm (RECYCLE 0); returns total */
+    Q_INVOKABLE void setCounts(int bottles, int cans);
     Q_INVOKABLE void sendVerdict(const QString &v); /* manual override: BOTTLE|CAN|REJECT */
     Q_INVOKABLE void setBaskets(bool bottleFull, bool canFull);
     Q_INVOKABLE void emptyAluBin();

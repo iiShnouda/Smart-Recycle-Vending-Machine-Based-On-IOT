@@ -602,6 +602,21 @@ QString ApplicationManager::localIp() const
     return QStringLiteral("unavailable");
 }
 
+int ApplicationManager::getUserPoints(const QString &userId)
+{
+    if (!m_database) return 0;
+    QVariantMap u = m_database->getUser(userId);
+    return u.value(QStringLiteral("points"), 0).toInt();
+}
+
+bool ApplicationManager::adjustPointsAndRecordTransaction(const QString &userId, const QString &kind, int slot, int delta)
+{
+    if (!m_database) return false;
+    bool ok1 = m_database->adjustUserPoints(userId, delta);
+    bool ok2 = m_database->recordTransaction(kind, userId, slot, delta, {});
+    return ok1 && ok2;
+}
+
 // =========================================================================
 // Serial bridge — re-emit signals so QML can listen
 // =========================================================================

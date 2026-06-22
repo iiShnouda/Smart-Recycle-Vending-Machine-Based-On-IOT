@@ -255,10 +255,16 @@ Rectangle {
         }
     }
 
-    Component { id: recyclePageComponent; RecycleWaitingPage {} }
+    Component {
+        id: recyclePageComponent
+        RecycleWaitingPage {
+            userId: mainRect.userId
+        }
+    }
     Component {
         id: vendingPageComponent
         VendingPage {
+            userId: mainRect.userId
             userName: mainRect.userName
             userPoints: mainRect.userPoints
         }

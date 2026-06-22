@@ -8,11 +8,12 @@ Rectangle {
     color: "#F2F4ED"
 
     property StackView stackView: StackView.view
+    property string userId: ""
     property real plasticTankVolume: 0.45
     property real canTankVolume: 0.35
     property int plasticCount: 0
     property int canCount: 0
-    property int totalPoints: plasticCount * 10 + canCount * 15
+    property int totalPoints: plasticCount * RecycleSession.smallBottlePoints + canCount * RecycleSession.canPoints
 
     // Translation refresh helper
     property int langTick: 0
@@ -20,6 +21,32 @@ Rectangle {
         target: appManager
         function onLanguageChanged() { langTick++ }
     }
+
+    // Connect to RecycleSession accepted and rejected events
+    Connections {
+        target: RecycleSession
+        function onItemAccepted(type, points) {
+            if (type === "bottle") {
+                countingPage.plasticCount++
+            } else if (type === "can") {
+                countingPage.canCount++
+            }
+            acceptFlash.restart()
+            autoSummaryTimer.restart()
+        }
+        function onItemRejected(reason) {
+            rejectFlash.restart()
+            autoSummaryTimer.restart()
+        }
+    }
+
+    // Full-screen flashes
+    Rectangle { id: acceptOverlay; anchors.fill: parent; color: "#16A34A"; opacity: 0; z: 99999
+        SequentialAnimation { id: acceptFlash; NumberAnimation { target: acceptOverlay; property: "opacity"; to: 0.18; duration: 120 }
+                              NumberAnimation { target: acceptOverlay; property: "opacity"; to: 0.0; duration: 380 } } }
+    Rectangle { id: rejectOverlay; anchors.fill: parent; color: "#DC2626"; opacity: 0; z: 99999
+        SequentialAnimation { id: rejectFlash; NumberAnimation { target: rejectOverlay; property: "opacity"; to: 0.22; duration: 120 }
+                              NumberAnimation { target: rejectOverlay; property: "opacity"; to: 0.0; duration: 480 } } }
 
     // This page has its OWN behavior: if user is silent for 60 s, jump to
     // the summary page (NOT pop). Kept as a local Timer because the action
@@ -29,14 +56,29 @@ Rectangle {
         interval: 60000
         repeat: false
         running: false
-        onTriggered: stackView.push(summaryPageComponent)
+        onTriggered: {
+            autoSummaryTimer.stop()
+            RecycleSession.setCounts(countingPage.plasticCount, countingPage.canCount)
+            var total = RecycleSession.finish()
+            stackView.push(summaryPageComponent, { totalPoints: total })
+        }
     }
 
     onPlasticCountChanged: { Idle.touch(); autoSummaryTimer.restart() }
     onCanCountChanged:     { Idle.touch(); autoSummaryTimer.restart() }
 
-    Component.onCompleted: { Idle.touch(); autoSummaryTimer.start() }
-    StackView.onActivated: { Idle.touch(); autoSummaryTimer.restart() }
+    Component.onCompleted: {
+        plasticCount = RecycleSession.bottles
+        canCount = RecycleSession.cans
+        Idle.touch()
+        autoSummaryTimer.start()
+    }
+    StackView.onActivated: {
+        plasticCount = RecycleSession.bottles
+        canCount = RecycleSession.cans
+        Idle.touch()
+        autoSummaryTimer.restart()
+    }
     Component.onDestruction: autoSummaryTimer.stop()
 
     TapHandler {
@@ -80,7 +122,7 @@ Rectangle {
             width: parent.width
             height: 360
             title: { langTick; return qsTr("Plastic Bottles") }
-            pointsEach: 10
+            pointsEach: RecycleSession.smallBottlePoints
             count: countingPage.plasticCount
             iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/plastic-bottle.png"
             onIncrement: countingPage.plasticCount++
@@ -91,11 +133,39 @@ Rectangle {
             width: parent.width
             height: 360
             title: { langTick; return qsTr("Aluminum Cans") }
-            pointsEach: 15
+            pointsEach: RecycleSession.canPoints
             count: countingPage.canCount
             iconSource: "qrc:/Recycle_Vending_Machine_LCD/resources/assets/soda-can.png"
             onIncrement: countingPage.canCount++
             onDecrement: if (countingPage.canCount > 0) countingPage.canCount--
+        }
+
+        // Proceed (Add Item) button to run conveyor belt for 3 seconds and trigger camera/model
+        Rectangle {
+            id: proceedBtn
+            width: parent.width
+            height: 100
+            radius: 28
+            color: "#16A34A"
+            scale: proceedTap.pressed ? 0.96 : 1.0
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
+            TapHandler {
+                id: proceedTap
+                onTapped: {
+                    Idle.touch()
+                    autoSummaryTimer.restart()
+                    appManager.sendArduino("START")
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                text: { langTick; return qsTr("Proceed (Add Item)") }
+                color: "#FFFFFF"
+                font.pixelSize: 32
+                font.weight: Font.ExtraBold
+            }
         }
 
         // Points + Done row
@@ -175,7 +245,9 @@ Rectangle {
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
                         onTapped: {
                             autoSummaryTimer.stop()
-                            stackView.push(summaryPageComponent)
+                            RecycleSession.setCounts(countingPage.plasticCount, countingPage.canCount)
+                            var total = RecycleSession.finish()
+                            stackView.push(summaryPageComponent, { totalPoints: total })
                         }
                     }
 
@@ -207,6 +279,7 @@ Rectangle {
     Component {
         id: summaryPageComponent
         RecycleSummaryPage {
+            userId: countingPage.userId
             plasticCount: countingPage.plasticCount
             canCount: countingPage.canCount
             totalPoints: countingPage.totalPoints

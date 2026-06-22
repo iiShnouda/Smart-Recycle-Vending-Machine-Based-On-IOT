@@ -41,7 +41,7 @@ Rectangle {
         function onLoginReceived(userId, name, points) {
             Idle.touch()
             stackView.replace("qrc:/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
-                              { userName: name, userId: userId })
+                              { userName: name, userId: userId, userPoints: points })
         }
     }
 

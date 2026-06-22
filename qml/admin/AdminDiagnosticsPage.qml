@@ -218,12 +218,12 @@ Rectangle {
 
             // ── Servo diverter ──
             SectionHeader { title: qsTr("Sorting servo") }
-            TestRow { label: qsTr("Bottle side (30°)");  cmd: "ANGLE:30";
-                      buttonColor: "#0891B2"; onTriggered: Diagnostics.testServo(30) }
+            TestRow { label: qsTr("Bottle side (0°)");  cmd: "ANGLE:0";
+                      buttonColor: "#0891B2"; onTriggered: Diagnostics.testServo(0) }
             TestRow { label: qsTr("Centre (90°)");       cmd: "ANGLE:90";
                       buttonColor: "#0891B2"; onTriggered: Diagnostics.testServo(90) }
-            TestRow { label: qsTr("Can side (150°)");    cmd: "ANGLE:150";
-                      buttonColor: "#0891B2"; onTriggered: Diagnostics.testServo(150) }
+            TestRow { label: qsTr("Can side (180°)");    cmd: "ANGLE:180";
+                      buttonColor: "#0891B2"; onTriggered: Diagnostics.testServo(180) }
 
             // ── Relays (lights) — On/Off per channel ──
             SectionHeader { title: qsTr("Relays / lights") }

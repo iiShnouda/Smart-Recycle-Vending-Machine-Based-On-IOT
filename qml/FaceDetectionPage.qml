@@ -44,6 +44,9 @@ Rectangle {
         function onIdentified(name, score) {
             status = 1
             successPause.userName = name
+            var uid = FaceRec.lastUserId.toString()
+            successPause.userId = uid
+            successPause.userPoints = appManager.getUserPoints(uid)
             successPause.start()
         }
         function onUnknown(bestScore) { status = 2; failurePause.start() }
@@ -55,9 +58,10 @@ Rectangle {
         interval: 900; repeat: false
         property string userId
         property string userName
+        property int userPoints: 0
         onTriggered: {
             stackView.push("qrc:/Recycle_Vending_Machine_LCD/qml/MainPage.qml",
-                           { userName: userName, userId: userId })
+                           { userName: userName, userId: userId, userPoints: userPoints })
         }
     }
     Timer {

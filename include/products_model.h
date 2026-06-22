@@ -65,6 +65,9 @@ public slots:
     /** Update live count + weight (called by load cell scanner). */
     Q_INVOKABLE bool updateInventory(int slot, int count, int weightG);
 
+    /** Decrement stock count of a single slot. */
+    Q_INVOKABLE bool decrementCount(int slot);
+
     /** Enable / disable a single slot. Used by the vending dispense flow
      *  to auto-disable a product after a fault.                          */
     Q_INVOKABLE bool setActive(int slot, bool active);

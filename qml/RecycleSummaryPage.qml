@@ -8,10 +8,17 @@ Rectangle {
     color: "#F2F4ED"
 
     property StackView stackView: StackView.view
+    property string userId: ""
     property int plasticCount: 0
     property int canCount: 0
     property int rejectedCount: 0
     property int totalPoints: 0
+
+    Component.onCompleted: {
+        if (totalPoints > 0 && userId !== "") {
+            appManager.adjustPointsAndRecordTransaction(userId, "recycle", 0, totalPoints)
+        }
+    }
 
     // Translation refresh helper
     property int langTick: 0
@@ -25,7 +32,10 @@ Rectangle {
     // the start screen if MainPage isn't on the stack for some reason.
     function goMain() {
         var mp = stackView.find(function(item) { return item.objectName === "mainPage" })
-        if (mp) stackView.pop(mp)
+        if (mp) {
+            mp.userPoints += summaryPage.totalPoints
+            stackView.pop(mp)
+        }
         else while (stackView && stackView.depth > 1) stackView.pop()
     }
 
@@ -309,7 +319,14 @@ Rectangle {
                     TapHandler {
                         id: vendingTap
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchScreen
-                        onTapped: stackView.push(Qt.resolvedUrl("VendingPage.qml"))
+                        onTapped: {
+                            var mp = stackView.find(function(item) { return item.objectName === "mainPage" })
+                            var name = mp ? mp.userName : "Guest"
+                            var uid = mp ? mp.userId : ""
+                            var pts = mp ? (mp.userPoints + summaryPage.totalPoints) : summaryPage.totalPoints
+                            if (mp) mp.userPoints = pts
+                            stackView.push(Qt.resolvedUrl("VendingPage.qml"), { userId: uid, userName: name, userPoints: pts })
+                        }
                     }
 
                     Column {

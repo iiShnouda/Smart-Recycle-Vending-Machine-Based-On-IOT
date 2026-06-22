@@ -171,6 +171,15 @@ bool ProductsModel::updateInventory(int slot, int count, int weightG)
     return ok;
 }
 
+bool ProductsModel::decrementCount(int slot)
+{
+    if (!ensureDb() || slot < 1 || slot > 8) return false;
+    Row &r = m_rows[slot - 1];
+    int newCount = r.count > 0 ? r.count - 1 : 0;
+    return updateInventory(slot, newCount, r.weightG);
+}
+
+
 bool ProductsModel::setActive(int slot, bool active)
 {
     if (!ensureDb() || slot < 1 || slot > 8) return false;
@@ -198,39 +207,17 @@ bool ProductsModel::setInStock(int slot, bool inStock)
 
 int ProductsModel::ingestRawReading(int slot, int raw, const QString &source)
 {
+    Q_UNUSED(source);
     if (slot < 1 || slot > 8) return -1;
     Row &r = m_rows[slot - 1];
 
     r.lastRaw = raw;
-
-    // No calibration yet → we can record the raw value but can't infer a
-    // count. UI will show "Not calibrated".
-    int newCount = r.count;
-    if (r.unitWeightRaw > 0) {
-        const int load = raw - r.emptyShelfRaw;
-        // round(load / unit) — symmetric for negative loads.
-        if (load >= 0) {
-            newCount = (load + r.unitWeightRaw / 2) / r.unitWeightRaw;
-        } else {
-            // Negative load means we read lighter than the empty tare — most
-            // likely a calibration drift or someone leaning on the shelf.
-            // Clamp to 0 so the count never goes negative.
-            newCount = 0;
-        }
-        if (newCount < 0) newCount = 0;
-    }
 
     // Approximate grams for legacy UI: hardcoded HX711 scale of ~22 raw / g
     // for a 1 kg cell at gain 128. Tune by patching this constant once.
     constexpr int RAW_PER_GRAM = 22;
     const int approxGrams = (raw - r.emptyShelfRaw) / RAW_PER_GRAM;
 
-    const int prevCount = r.count;
-    if (newCount != prevCount && m_db && r.unitWeightRaw > 0) {
-        m_db->recordRestockEvent(slot, prevCount, newCount, source);
-    }
-
-    r.count   = newCount;
     r.weightG = approxGrams;
 
     if (m_db) {
@@ -242,8 +229,8 @@ int ProductsModel::ingestRawReading(int slot, int raw, const QString &source)
 
     const QModelIndex idx = index(slot - 1);
     emit dataChanged(idx, idx,
-                     { RoleCount, RoleWeight, RoleLastRaw });
-    return newCount;
+                     { RoleWeight, RoleLastRaw });
+    return r.count;
 }
 
 bool ProductsModel::calibrateEmptyShelf(int slot, int currentRaw)

@@ -110,6 +110,9 @@ public slots:
      *  Shown in the admin panel so you can point the mobile app at it.    */
     Q_INVOKABLE QString localIp() const;
 
+    Q_INVOKABLE int getUserPoints(const QString &userId);
+    Q_INVOKABLE bool adjustPointsAndRecordTransaction(const QString &userId, const QString &kind, int slot, int delta);
+
     // ---- Dispense fault inspection (called by AdminFaultsPage) ----
     /** Newest faults first; limit defaults to 100.                       */
     Q_INVOKABLE QVariantList dispenseFaults(int limit = 100);

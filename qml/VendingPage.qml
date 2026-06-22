@@ -15,6 +15,7 @@ Rectangle {
     color: "#EFF3EA"
 
     property StackView stackView: StackView.view
+    property string userId: ""
     property string userName: "Guest"
     property int    userPoints: 0
 
@@ -75,6 +76,10 @@ Rectangle {
             vendingPage.userPoints   -= item.points
             vendingPage.pointsUsed   += item.points
             vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
+            ProductsModel.decrementCount(item.slot)
+            if (vendingPage.userId !== "") {
+                appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
+            }
             dispensingIndex++; sendNextDispense()
         }
         function onSerialCommandFailed(cmd, reason) {

@@ -52,6 +52,14 @@ int RecycleSession::finish()
     return total;
 }
 
+void RecycleSession::setCounts(int bottles, int cans)
+{
+    m_smallBottles = bottles;
+    m_largeBottles = 0;
+    m_cans = cans;
+    emit countsChanged();
+}
+
 // ── camera verdict → tell the Arduino how to sort ─────────────────────────────
 void RecycleSession::sendVerdict(const QString &v)
 {

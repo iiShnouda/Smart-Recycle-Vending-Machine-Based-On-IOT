@@ -9,6 +9,7 @@ Rectangle {
     color: "#F2F4ED"
 
     property StackView stackView: StackView.view
+    property string userId: ""
     property real plasticTankVolume: 0.45
     property real canTankVolume: 0.35
 
@@ -31,15 +32,8 @@ Rectangle {
     // Re-arm the idle timeout when leaving the recycle flow.
     StackView.onDeactivated: Idle.enable()
 
-    Connections {
-        target: RecycleSession
-        function onItemEntered() {
-            if (waitingPage.navigated) return
-            waitingPage.navigated = true
-            stackView.push(sessionPageComponent)
-        }
-    }
-    Component { id: sessionPageComponent; RecycleSessionPage {} }
+    // Connections to onItemEntered removed because IR sensors are removed.
+    // Transition is now strictly driven by the Proceed button.
 
     // Leaving before any item entered → disarm the lane.
     function leave() {
@@ -278,7 +272,7 @@ Rectangle {
                     appManager.sendArduino("START")
                     if (!waitingPage.navigated) {
                         waitingPage.navigated = true
-                        stackView.push(sessionPageComponent)
+                        stackView.push(countingPageComponent)
                     }
                 }
             }
@@ -297,6 +291,7 @@ Rectangle {
     Component {
         id: countingPageComponent
         RecycleCountingPage {
+            userId: waitingPage.userId
             plasticTankVolume: waitingPage.plasticTankVolume
             canTankVolume: waitingPage.canTankVolume
         }
