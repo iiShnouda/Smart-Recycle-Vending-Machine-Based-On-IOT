@@ -28,7 +28,19 @@ from scripts.voice import speak
 
 MODEL_PATH   = Path("models") / "arcface.onnx"
 YUNET_PATH   = Path("models") / "face_detection_yunet_2023mar.onnx"
-CAM_INDEX    = int(os.environ.get("FACE_CAM_INDEX", "0"))      # 0 = /dev/video0
+def _resolve_cam():
+    """Pick the USB webcam robustly: FACE_CAM_INDEX override (index or path),
+    else the stable /dev/v4l/by-id UVC capture node (survives /dev/video index
+    shifts when the CSI camera grabs video0), else index 1."""
+    import glob
+    env = os.environ.get("FACE_CAM_INDEX", "").strip()
+    if env:
+        return int(env) if env.lstrip("-").isdigit() else env
+    uvc = sorted(glob.glob("/dev/v4l/by-id/*-video-index0"))
+    if uvc:
+        return uvc[0]                       # USB webcam (e.g. C270) capture node
+    return 1                                # CSI usually takes video0, USB cam video1
+CAM_INDEX    = _resolve_cam()
 PREVIEW_PATH = os.environ.get("FACE_PREVIEW", "/tmp/rewingo_face.jpg")
 TOTAL_POSES  = 3
 STEP_TIMEOUT = float(os.environ.get("ENROLL_STEP_SEC", "7"))   # per-pose cap
