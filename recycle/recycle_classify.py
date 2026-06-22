@@ -9,9 +9,10 @@ sends `EVT,CAMERA`. The kiosk launches THIS script, which:
   • decides bottle / can / reject,
   • prints ONE JSON verdict line and exits.
 
-It is fully HEADLESS — no cv2 window. The kiosk owns the screen and forwards
-the verdict to the STM32 as `VERDICT BOTTLE|CAN|REJECT`. (The cv2-window
-scripts, recycle_test.py / recycle.sh, are dev test tools only.)
+By default it ALSO pops a live cv2 window (RECYCLE_WINDOW=1) showing the camera
+feed, detection boxes, per-box confidence, the accept threshold and the running
+verdict — so you can watch what it decides. Set RECYCLE_WINDOW=0 for a fully
+headless run. The kiosk forwards the verdict on to the belt/servo flow.
 
 stdout protocol (one JSON object per line, unbuffered):
   {"e":"verdict","verdict":"bottle","cls":"large_bottle","conf":0.87}
@@ -155,6 +156,11 @@ def main():
         return 0
 
     # ── Production: open the CSI camera and watch for a short burst ──
+    # RECYCLE_WINDOW=1 (default) pops a live cv2 window on the Pi screen with
+    # the detection boxes, the per-box confidence, the accept threshold and the
+    # running best verdict — so you can SEE what the camera decides. Set
+    # RECYCLE_WINDOW=0 for a fully-headless run.
+    SHOW = os.environ.get("RECYCLE_WINDOW", "1") != "0"
     try:
         import cv2
         from picamera2 import Picamera2
@@ -167,20 +173,72 @@ def main():
         emit({"e": "verdict", "verdict": "reject", "cls": None, "conf": 0.0})
         return 0
 
+    WIN = "ReWinGo Recycle — detecting"
+    if SHOW:
+        try:
+            cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(WIN, 960, 540)
+            cv2.moveWindow(WIN, 60, 60)
+        except Exception:
+            SHOW = False
+
+    names_map = NAME_MAP or model.names
     detections = []
+    best = ("reject", None, 0.0)   # (verdict, cls, conf) — best accepted so far
+    last_disp = None
     t_end = time.time() + BURST
     try:
-        # Warm-up frame (first capture is often dark / mid-exposure).
-        picam.capture_array()
+        picam.capture_array()      # warm-up (first capture is often dark)
         while time.time() < t_end:
             frame_rgb = picam.capture_array()
             frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-            detections.extend(run_model(model, frame_bgr))
+            r = model.predict(frame_bgr, imgsz=IMGSZ, conf=HINT, verbose=False)[0]
+
+            disp = frame_bgr.copy() if SHOW else None
+            if r.boxes is not None:
+                for b in r.boxes:
+                    ci = int(b.cls); nm = names_map.get(ci, str(ci)); cf = float(b.conf)
+                    detections.append((nm, cf))
+                    v = verdict_for(nm)
+                    accepted = (v is not None and cf >= CONF)
+                    if accepted and cf > best[2]:
+                        best = (v, nm, cf)
+                    if SHOW:
+                        x1, y1, x2, y2 = [int(z) for z in b.xyxy[0]]
+                        col = (0, 200, 0) if accepted else (0, 165, 255)
+                        cv2.rectangle(disp, (x1, y1), (x2, y2), col, 2)
+                        cv2.putText(disp, f"{nm} {cf:.0%}", (x1, max(14, y1 - 8)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, col, 2)
+            if SHOW:
+                cv2.rectangle(disp, (0, 0), (disp.shape[1], 44), (32, 32, 32), -1)
+                cv2.putText(disp,
+                            f"accept >= {CONF:.0%}   best: {best[0].upper()} {best[2]:.0%}",
+                            (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                last_disp = disp
+                cv2.imshow(WIN, disp)
+                cv2.waitKey(1)
     except Exception as e:
         emit({"e": "error", "msg": f"inference failed: {e}"})
     finally:
         try:
             picam.stop()
+        except Exception:
+            pass
+
+    # Hold the final verdict on screen for ~1.5 s so the operator can read it.
+    if SHOW and last_disp is not None:
+        try:
+            txt = best[0].upper() if best[1] else "REJECT"
+            col = (0, 200, 0) if best[1] else (0, 0, 255)
+            cv2.rectangle(last_disp, (0, last_disp.shape[0] - 60),
+                          (last_disp.shape[1], last_disp.shape[0]), (20, 20, 20), -1)
+            cv2.putText(last_disp, f"VERDICT: {txt}  ({best[2]:.0%})",
+                        (12, last_disp.shape[0] - 18),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, col, 3)
+            cv2.imshow(WIN, last_disp)
+            cv2.waitKey(1500)
+            cv2.destroyWindow(WIN)
+            cv2.waitKey(1)
         except Exception:
             pass
 
