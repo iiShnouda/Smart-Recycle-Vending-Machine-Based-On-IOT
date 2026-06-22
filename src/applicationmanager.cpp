@@ -263,17 +263,18 @@ void ApplicationManager::initialize()
             });
 
     // ── Recycle session ────────────────────────────────────────────────
-    // The KIOSK owns the recycle sequence now:
-    //   • the STM32 reads the 5 IR sensors and pushes EVT,IR,<1..5>,<1|0> →
-    //     feed those into RecycleSession (the state machine).
-    //   • RecycleSession drives the belt + sorting servo via sendCommand →
-    //     route those out to the ARDUINO (BELT:FWD/STOP/REV, SERVO:BOTTLE/CAN…).
+    // The ARDUINO owns the recycle lane (5 IR sensors + belt + sorting servo)
+    // and runs the whole sequence. The kiosk only does the camera + the counter:
+    //   • feed the Arduino's EVT lines (EVT,ENTRY/CAMERA/DROPPED/REJECTED) into
+    //     RecycleSession;
+    //   • RecycleSession sends RECYCLE 1/0 + VERDICT BOTTLE|CAN|REJECT back out
+    //     to the Arduino.
     new RecycleSession(this);
     if (RecycleSession::s_instance) {
-        // IR edge events come from the STM32 link.
-        connect(m_serial, &Serial_Connection::replyReceived,
+        // EVT lines come from the ARDUINO link.
+        connect(m_arduino, &Serial_Connection::replyReceived,
                 RecycleSession::s_instance, &RecycleSession::onSerialLine);
-        // Belt + servo commands go out to the Arduino actuator.
+        // RECYCLE/VERDICT go back out to the Arduino.
         connect(RecycleSession::s_instance, &RecycleSession::sendCommand,
                 this, [this](const QString &cmd){
                     if (!m_arduino) return;
@@ -283,8 +284,8 @@ void ApplicationManager::initialize()
                                               Q_ARG(int, 3000));
                 });
 
-        // Camera "brain": IR3 (belt stopped) → run the headless recycle
-        // classifier (CSI cam + YOLO, 3 s, ≥0.70) → verdict drives the sort.
+        // Camera "brain": EVT,CAMERA → run the recycle classifier (CSI cam +
+        // YOLO, 3 s, ≥0.70, live window) → verdict drives the Arduino's sort.
         m_recycleClassifier = new RecycleClassifier(this);
         connect(RecycleSession::s_instance, &RecycleSession::cameraRequested,
                 m_recycleClassifier, &RecycleClassifier::classify);
