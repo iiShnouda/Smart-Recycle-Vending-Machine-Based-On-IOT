@@ -260,14 +260,6 @@ Rectangle {
             }
         }
 
-        Text {
-            text: { langTick; return qsTr("— Tap a circle to simulate inserting an item —") }
-            color: "#5A6B52"
-            font.pixelSize: 18
-            font.weight: Font.DemiBold
-            anchors.horizontalCenter: parent.horizontalCenter
-            opacity: 0.9
-        }
     }
 
     // ===== Counting page transition =====
