@@ -65,26 +65,40 @@ Rectangle {
         }
         var item = cart[dispensingIndex]
         dispensingStatus = qsTr("Dispensing ") + item.name + "…"
-        // Fire-and-forget: send the motor command to STM32, don't wait for ACK
-        appManager.sendSerial("DISPENSE:" + item.slot, 0)
-        // Instantly process as dispensed
-        vendingPage.userPoints   -= item.points
-        vendingPage.pointsUsed   += item.points
-        vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
-        ProductsModel.decrementCount(item.slot)
-        if (vendingPage.userId !== "") {
-            appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
-        }
-        dispensingIndex++
-        // Brief delay so the user sees the dispensing overlay per item
-        dispenseNextTimer.start()
+        // Send command with long timeout (15000ms) to allow STM32 to complete the physical rotation.
+        appManager.sendSerial("DISPENSE:" + item.slot, 15000)
     }
 
-    Timer {
-        id: dispenseNextTimer
-        interval: 500
-        repeat: false
-        onTriggered: sendNextDispense()
+    Connections {
+        target: appManager
+        function onSerialCommandSucceeded(command, reply) {
+            if (vendingPage.dispensing && command.startsWith("DISPENSE:")) {
+                var item = cart[dispensingIndex]
+                // Only take points if the motor command succeeded without mechanical fault (stalls etc)
+                vendingPage.userPoints   -= item.points
+                vendingPage.pointsUsed   += item.points
+                vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
+                ProductsModel.decrementCount(item.slot)
+                if (vendingPage.userId !== "") {
+                    appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
+                }
+                dispensingIndex++
+                sendNextDispense()
+            }
+        }
+        function onSerialCommandFailed(command, reason) {
+            if (vendingPage.dispensing && command.startsWith("DISPENSE:")) {
+                // If the hardware failed to dispense (e.g. STALL, TIMEOUT), refund/skip taking points
+                var item = cart[dispensingIndex]
+                sorryDialog.failedItem = item
+                sorryDialog.failedReason = reason
+                sorryDialog.open()
+                
+                // Skip this item and continue
+                dispensingIndex++
+                sendNextDispense()
+            }
+        }
     }
 
     Component.onCompleted: { Idle.touch(); ProductsModel.reload() }
