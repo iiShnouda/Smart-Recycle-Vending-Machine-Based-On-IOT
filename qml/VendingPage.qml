@@ -75,13 +75,13 @@ Rectangle {
             if (vendingPage.dispensing && command.startsWith("DISPENSE:")) {
                 var item = cart[dispensingIndex]
                 // Only take points if the motor command succeeded without mechanical fault (stalls etc)
-                vendingPage.userPoints   -= item.points
-                vendingPage.pointsUsed   += item.points
+                // vendingPage.userPoints   -= item.points
+                // vendingPage.pointsUsed   += item.points
                 vendingPage.dispensedItems = vendingPage.dispensedItems.concat([item])
                 ProductsModel.decrementCount(item.slot)
-                if (vendingPage.userId !== "") {
-                    appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
-                }
+                // if (vendingPage.userId !== "") {
+                //     appManager.adjustPointsAndRecordTransaction(vendingPage.userId, "vending", item.slot, -item.points)
+                // }
                 dispensingIndex++
                 sendNextDispense()
             }
@@ -183,8 +183,8 @@ Rectangle {
                 radius: 24
                 color: isEmpty ? "#F2F4ED" : "#FFFFFF"
                 border.width: 2
-                border.color: tappable ? "#7A8B6A" : (!active && !isEmpty ? "#DC2626" : "#D8E0CF")
-                opacity: (isEmpty || !tappable) ? 0.6 : 1.0
+                border.color: canBuy ? "#7A8B6A" : (!active && !isEmpty ? "#DC2626" : "#D8E0CF")
+                opacity: (isEmpty || !canBuy) ? 0.6 : 1.0
 
                 // slot tag
                 Rectangle {
@@ -195,12 +195,12 @@ Rectangle {
                 }
                 // status badge
                 Rectangle {
-                    visible: !isEmpty && !tappable
+                    visible: !isEmpty && !canBuy
                     width: bt.implicitWidth + 22; height: 30; radius: 15
                     anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 12
-                    color: !active ? "#DC2626" : !inStock ? "#9CA3AF" : "#92400E"
+                    color: !active ? "#DC2626" : "#9CA3AF"
                     Text { id: bt; anchors.centerIn: parent
-                           text: !active ? qsTr("OFF") : !inStock ? qsTr("EMPTY") : qsTr("LOW PTS")
+                           text: !active ? qsTr("OFF") : qsTr("EMPTY")
                            color: "#FFFFFF"; font.pixelSize: 12; font.weight: Font.Bold }
                 }
 
@@ -242,8 +242,11 @@ Rectangle {
                 }
 
                 TapHandler {
-                    enabled: tappable
-                    onTapped: addToCart(slot, name, pricePoints, imagePath)
+                    enabled: canBuy
+                    onTapped: {
+                        cart = [{ slot: slot, name: name, points: 0, imagePath: imagePath }]
+                        startDispenseSequence()
+                    }
                 }
             }
         }

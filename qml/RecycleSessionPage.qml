@@ -202,7 +202,32 @@ Rectangle {
         width: 320; height: 80; radius: 40; color: "#0891B2"
         scale: scanTap.pressed ? 0.95 : 1.0
         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
-        TapHandler { id: scanTap; onTapped: RecycleSession.triggerCamera() }
+        Timer {
+            id: scanSequenceTimer
+            interval: 3000
+            onTriggered: {
+                appManager.sendArduino("ANGLE:0", 800)
+                appManager.sendArduino("CONVEYOR", 15000)
+                beltWaitTimer.start()
+            }
+        }
+
+        Timer {
+            id: beltWaitTimer
+            interval: 10000
+            onTriggered: {
+                RecycleSession.onSerialLine("EVT,DROPPED,BOTTLE")
+                scanBtn.enabled = true
+            }
+        }
+
+        TapHandler { 
+            id: scanTap
+            onTapped: {
+                scanBtn.enabled = false
+                scanSequenceTimer.start()
+            } 
+        }
         Text { anchors.centerIn: parent
                text: qsTr("Scan next item")
                color: "#FFFFFF"; font.pixelSize: 26; font.weight: Font.ExtraBold }
