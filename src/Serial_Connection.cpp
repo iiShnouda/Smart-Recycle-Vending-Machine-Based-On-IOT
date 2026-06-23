@@ -216,6 +216,9 @@ void Serial_Connection::teardownAfterFailure()
         m_serial->deleteLater();
         m_serial = nullptr;
     }
+    if (!m_pending.command.isEmpty()) {
+        emit commandFailed(m_pending.command, "port disconnected");
+    }
     m_pending = {};                          // drop the in-flight command
     emit disconnected();
     if (m_isStarted) m_reconnectTimer->start();
