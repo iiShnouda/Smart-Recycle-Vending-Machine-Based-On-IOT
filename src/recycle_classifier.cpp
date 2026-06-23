@@ -15,7 +15,7 @@ RecycleClassifier::RecycleClassifier(QObject *parent) : QObject(parent)
     // Covers ONNX model load (~2-3s) + camera open (~1-2s) + the burst (~1.5s)
     // with headroom, so a slow-but-valid classification isn't pre-empted by a
     // spurious REJECT.
-    m_timeout.setInterval(12000);
+    m_timeout.setInterval(600000);
     connect(&m_timeout, &QTimer::timeout, this, [this] {
         Logger::warn("Recycle", "Classifier timed out — defaulting to REJECT");
         cancel();
@@ -59,10 +59,15 @@ QString RecycleClassifier::resolveScript() const
 #endif
 }
 
+bool RecycleClassifier::isRunning() const
+{
+    return m_proc && m_proc->state() == QProcess::Running && !m_emitted;
+}
+
 void RecycleClassifier::classify()
 {
     if (isRunning()) {
-        Logger::warn("Recycle", "Classify requested while still running — ignored");
+        Logger::warn("Recycle", "Classify requested while still scanning — ignored");
         return;
     }
 
@@ -75,32 +80,41 @@ void RecycleClassifier::classify()
         return;
     }
 
+    if (!m_proc || m_proc->state() != QProcess::Running) {
+        if (m_proc) { m_proc->deleteLater(); }
+        m_proc = new QProcess(this);
+        m_proc->setProgram(python);
+        m_proc->setArguments({ "-u", script });        // -u = unbuffered JSON
+        m_proc->setProcessChannelMode(QProcess::MergedChannels);
+        connect(m_proc.data(), &QProcess::readyReadStandardOutput,
+                this, &RecycleClassifier::onStdout);
+        connect(m_proc.data(), &QProcess::finished,
+                this, &RecycleClassifier::onFinished);
+        connect(m_proc.data(), &QProcess::errorOccurred,
+                this, &RecycleClassifier::onErrorOccurred);
+
+        Logger::audit("Recycle", "Launching continuous classifier",
+                      { {"python", python}, {"script", script} });
+        m_proc->start();
+        if (!m_proc->waitForStarted(3000)) {
+            Logger::error("Recycle", "Classifier failed to start — REJECT");
+            emitVerdictOnce(QStringLiteral("REJECT"));
+            return;
+        }
+    }
+
     m_buf.clear();
     m_emitted = false;
-
-    m_proc = new QProcess(this);
-    m_proc->setProgram(python);
-    m_proc->setArguments({ "-u", script });        // -u = unbuffered JSON
-    m_proc->setProcessChannelMode(QProcess::MergedChannels);
-    connect(m_proc.data(), &QProcess::readyReadStandardOutput,
-            this, &RecycleClassifier::onStdout);
-    connect(m_proc.data(), &QProcess::finished,
-            this, &RecycleClassifier::onFinished);
-    connect(m_proc.data(), &QProcess::errorOccurred,
-            this, &RecycleClassifier::onErrorOccurred);
-
-    Logger::audit("Recycle", "Launching classifier",
-                  { {"python", python}, {"script", script} });
-    m_proc->start();
+    
+    // Trigger the scan!
+    m_proc->write("SCAN\n");
     m_timeout.start();
 }
 
 void RecycleClassifier::cancel()
 {
     m_timeout.stop();
-    if (!m_proc || m_proc->state() == QProcess::NotRunning) return;
-    m_proc->kill();
-    m_proc->waitForFinished(400);
+    m_emitted = true; // Stop waiting
 }
 
 void RecycleClassifier::emitVerdictOnce(const QString &v)
@@ -133,6 +147,14 @@ void RecycleClassifier::onStdout()
             // large (2) bottles. cls is small_bottle | large_bottle | can.
             const QString v   = obj.value("verdict").toString().toLower();
             const QString cls = obj.value("cls").toString();
+            const double conf = obj.value("conf").toDouble();
+            
+            Logger::audit("Recycle", "Classifier Result", {
+                {"verdict", v},
+                {"class", cls},
+                {"confidence", conf}
+            });
+
             if (v == "bottle")
                 emitVerdictOnce(cls.isEmpty() ? QStringLiteral("small_bottle") : cls);
             else if (v == "can")
@@ -148,16 +170,12 @@ void RecycleClassifier::onStdout()
     }
 }
 
-void RecycleClassifier::onFinished(int exitCode, QProcess::ExitStatus /*status*/)
+void RecycleClassifier::onFinished(int exitCode, QProcess::ExitStatus status)
 {
-    if (m_proc) {
-        m_buf += QString::fromUtf8(m_proc->readAll());
-        onStdout();   // re-parse any tail
-    }
-    // The sidecar always prints a verdict; if it died without one, clear the
-    // lane safely.
+    Q_UNUSED(status);
+    Logger::info("Recycle", QString("Classifier python process exited (code %1)").arg(exitCode));
     if (!m_emitted) {
-        Logger::warn("Recycle", "Classifier exited with no verdict — REJECT",
+        Logger::warn("Recycle", "Classifier exited while scanning — REJECT",
                      { {"rc", exitCode} });
         emitVerdictOnce(QStringLiteral("REJECT"));
     }
